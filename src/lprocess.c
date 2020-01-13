@@ -172,7 +172,7 @@ static int process_exited(lua_State *L)
             p->status = WEXITSTATUS(status);
 #endif
     }
-    lua_pushboolean(L, active);
+    lua_pushboolean(L, !active);
     return 1;
 }
 

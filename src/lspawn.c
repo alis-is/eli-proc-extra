@@ -180,10 +180,10 @@ static const char **get_env(lua_State *L)
     {                  // envtab k v
         lua_pop(L, 1); // envtab k
         n++;
-    } // envtab nil
+    } // envtab
 
     const char **env = lua_newuserdata(L, (n + 2) * sizeof *env); // envtab nil env
-    lua_insert(L, -2);                                            // envtab env nil
+    lua_pushnil(L);                                            // envtab env nil
 
     for (i = 0; lua_next(L, -3); i++)
     { /* ... envtab env k v */
