@@ -182,8 +182,8 @@ static const char **get_env(lua_State *L)
         n++;
     } // envtab
 
-    const char **env = lua_newuserdata(L, (n + 2) * sizeof *env); // envtab nil env
-    lua_pushnil(L);                                            // envtab env nil
+    const char **env = lua_newuserdata(L, (n + 1) * sizeof *env); // envtab nil env
+    lua_pushnil(L);                                               // envtab env nil
 
     for (i = 0; lua_next(L, -3); i++)
     { /* ... envtab env k v */
@@ -204,14 +204,13 @@ static const char **get_env(lua_State *L)
         }
         lua_pop(L, 1); // envtab env k
 
-        char *t = malloc((klen + vlen + 2) * sizeof(char));
+        char *t =  malloc((klen + vlen + 2) * sizeof(char));
         memcpy(t, k, klen);
         t[klen] = '=';
         memcpy(t + klen + 1, v, vlen + 1);
-
         env[i] = t;
     } /* ... envtab env */
-    env[n + 1] = 0;
+    env[n] = 0;
     // ua_replace(L, -2); /* ... env */
     lua_pop(L, 2);
     return env;
@@ -327,6 +326,7 @@ int spawn_param_execute(struct spawn_params *p)
     return 1;
 #else
     errno = 0;
+
     ret = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
                        (char *const *)p->argv, (char *const *)p->envp);
     posix_spawn_file_actions_destroy(&p->redirect);

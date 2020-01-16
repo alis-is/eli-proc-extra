@@ -17,6 +17,6 @@ typedef struct process
 #endif
 } process;
 
-#define PROCESS_METATABLE "process"
+#define PROCESS_METATABLE "ELI_PROCESS"
 
 int process_create_meta(lua_State *L);

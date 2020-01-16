@@ -5,6 +5,9 @@
 #include "lcwd.h"
 #include "lutil.h"
 #include "lprocess.h"
+#include "lpipe.h"
+
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -32,8 +35,42 @@ static void get_redirect(lua_State *L,
                          int idx, const char *stdname, struct spawn_params *p)
 {
     lua_getfield(L, idx, stdname);
+    int top = lua_gettop(L);
     if (!lua_isnil(L, -1))
-        spawn_param_redirect(p, stdname, fileno(check_file(L, -1, stdname)));
+    {
+        lua_getmetatable(L, -1);
+        luaL_getmetatable(L, LUA_FILEHANDLE);
+        luaL_getmetatable(L, PIPE_METATABLE);
+
+        if (lua_rawequal(L, -2, -3)) { // file
+            lua_pop(L, lua_gettop(L) - top);
+
+            luaL_Stream *fh = (luaL_Stream *)luaL_checkudata(L, -1, "FILE*");
+            if (fh->closef == 0 || fh->f == NULL)
+            {
+                luaL_error(L, "%s: closed file");
+                return;
+            }
+            spawn_param_redirect(p, stdname, fileno(fh->f));
+            lua_pop(L, 1);
+            return;
+        }
+        if (lua_rawequal(L, -1, -3)) { // eli pipe
+            lua_pop(L, lua_gettop(L) - top);
+            ELI_PIPE *_pipe = (ELI_PIPE *)luaL_checkudata(L, -1, "ELI_PIPE");
+            if (_pipe->closed)
+            {
+                luaL_error(L, "%s: closed pipe");
+                return;
+            }
+            spawn_param_redirect(p, stdname, _pipe->fd);
+            lua_pop(L, 1);
+            return;
+        }
+        lua_pop(L, lua_gettop(L) - top);
+        luaL_typeerror(L, -1, "FILE*/ELI_PIPE");
+        return;
+    }
     lua_pop(L, 1);
 }
 
