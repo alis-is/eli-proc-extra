@@ -204,7 +204,7 @@ static const char **get_env(lua_State *L)
         }
         lua_pop(L, 1); // envtab env k
 
-        char *t =  malloc((klen + vlen + 2) * sizeof(char));
+        char *t = malloc((klen + vlen + 2) * sizeof(char));
         memcpy(t, k, klen);
         t[klen] = '=';
         memcpy(t + klen + 1, v, vlen + 1);

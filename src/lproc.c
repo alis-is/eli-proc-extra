@@ -42,7 +42,8 @@ static void get_redirect(lua_State *L,
         luaL_getmetatable(L, LUA_FILEHANDLE);
         luaL_getmetatable(L, PIPE_METATABLE);
 
-        if (lua_rawequal(L, -2, -3)) { // file
+        if (lua_rawequal(L, -2, -3))
+        { // file
             lua_pop(L, lua_gettop(L) - top);
 
             luaL_Stream *fh = (luaL_Stream *)luaL_checkudata(L, -1, "FILE*");
@@ -55,7 +56,8 @@ static void get_redirect(lua_State *L,
             lua_pop(L, 1);
             return;
         }
-        if (lua_rawequal(L, -1, -3)) { // eli pipe
+        if (lua_rawequal(L, -1, -3))
+        { // eli pipe
             lua_pop(L, lua_gettop(L) - top);
             ELI_PIPE *_pipe = (ELI_PIPE *)luaL_checkudata(L, -1, "ELI_PIPE");
             if (_pipe->closed)
