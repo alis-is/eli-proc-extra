@@ -7,6 +7,7 @@ typedef struct ELI_PIPE
 #endif
     int closed;
     int nonblocking;
+    const char *mode;
 } ELI_PIPE;
 
 #define PIPE_METATABLE "ELI_PIPE"
