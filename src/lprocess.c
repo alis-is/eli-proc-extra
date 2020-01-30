@@ -198,6 +198,8 @@ int process_create_meta(lua_State *L)
     lua_pushcfunction(L, process_exitcode);
     lua_setfield(L, -2, "exitcode");
 
+    lua_pushstring(L, PROCESS_METATABLE);
+    lua_setfield(L, -2, "__type");
     /* Metamethods */
     lua_setfield(L, -2, "__index");
     return 1;
