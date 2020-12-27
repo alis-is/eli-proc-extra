@@ -6,29 +6,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include "environ.h"
-
-#include <unistd.h>
-#include <spawn.h>
-#endif
-
-struct spawn_params
-{
-    lua_State *L;
-#ifdef _WIN32
-    const char *cmdline;
-    const char *environment;
-    STARTUPINFO si;
-#else
-    const char *command, **argv, **envp;
-    posix_spawn_file_actions_t redirect;
-    posix_spawnattr_t attr;
-#endif
-};
+#include "lspawn.h"
 
 #ifdef _WIN32
 /* quotes and adds argument string to b */
@@ -59,9 +37,9 @@ static int add_argument(luaL_Buffer *b, const char *s)
 }
 #endif
 
-struct spawn_params *spawn_param_init(lua_State *L)
+spawn_params *spawn_param_init(lua_State *L)
 {
-    struct spawn_params *p = lua_newuserdata(L, sizeof *p);
+    spawn_params *p = lua_newuserdata(L, sizeof *p);
 #ifdef _WIN32
     static const STARTUPINFO si = {sizeof si};
     p->L = L;
@@ -74,10 +52,13 @@ struct spawn_params *spawn_param_init(lua_State *L)
     posix_spawn_file_actions_init(&p->redirect);
     posix_spawnattr_init(&p->attr);
 #endif
+    p->stdio[STDIO_STDIN] = NULL;
+    p->stdio[STDIO_STDOUT] = NULL;
+    p->stdio[STDIO_STDERR] = NULL;
     return p;
 }
 
-void spawn_param_filename(struct spawn_params *p, const char *filename)
+void spawn_param_filename(spawn_params *p, const char *filename)
 {
 #ifdef _WIN32
     lua_State *L = p->L;
@@ -156,7 +137,7 @@ static char *to_win_argv(lua_State *L, const char **argv)
 #endif
 
 /* ... argtab -- ... argtab vector */
-void spawn_param_args(struct spawn_params *p)
+void spawn_param_args(spawn_params *p)
 {
     lua_State *L = p->L;
     const char **argv = get_argv(L); // cmd opts argv
@@ -235,7 +216,7 @@ static char *to_win_env(lua_State *L, const char **env)
 }
 #endif
 
-void spawn_param_env(struct spawn_params *p)
+void spawn_param_env(spawn_params *p)
 {
     lua_State *L = p->L;
     const char **env = get_env(L);
@@ -247,7 +228,7 @@ void spawn_param_env(struct spawn_params *p)
 }
 
 #ifdef _WIN32
-void spawn_param_redirect(struct spawn_params *p, const char *stdname, HANDLE h)
+void spawn_param_redirect(spawn_params *p, int d, HANDLE h)
 {
     SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     if (!(p->si.dwFlags & STARTF_USESTDHANDLES))
@@ -257,40 +238,28 @@ void spawn_param_redirect(struct spawn_params *p, const char *stdname, HANDLE h)
         p->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
         p->si.dwFlags |= STARTF_USESTDHANDLES;
     }
-    switch (stdname[3])
+    switch (d)
     {
-    case 'i':
+    case STDIO_STDIN:
         p->si.hStdInput = h;
         break;
-    case 'o':
+    case STDIO_STDOUT:
         p->si.hStdOutput = h;
         break;
-    case 'e':
+    case STDIO_STDERR:
         p->si.hStdError = h;
         break;
     }
+    spawn_param_redirect_raw(p, stdname, h);
 }
 #else
-void spawn_param_redirect(struct spawn_params *p, const char *stdname, int fd)
+void spawn_param_redirect(spawn_params *p, int d, int fd) 
 {
-    int d;
-    switch (stdname[3])
-    {
-    case 'i':
-        d = STDIN_FILENO;
-        break;
-    case 'o':
-        d = STDOUT_FILENO;
-        break;
-    case 'e':
-        d = STDERR_FILENO;
-        break;
-    }
     posix_spawn_file_actions_adddup2(&p->redirect, fd, d);
 }
 #endif
 
-int spawn_param_execute(struct spawn_params *p)
+int spawn_param_execute(spawn_params *p)
 {
     lua_State *L = p->L;
     int ret;
@@ -312,6 +281,9 @@ int spawn_param_execute(struct spawn_params *p)
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;
+    proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
+    proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
+    proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
 
 #ifdef _WIN32
     c = strdup(p->cmdline);
@@ -333,4 +305,5 @@ int spawn_param_execute(struct spawn_params *p)
     posix_spawnattr_destroy(&p->attr);
     return ret != 0 /*|| errno != 0*/ ? push_error(L, NULL) : 1;
 #endif
+    free(p);
 }

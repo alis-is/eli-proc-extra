@@ -3,10 +3,28 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include "environ.h"
+
+#include <unistd.h>
+#include <spawn.h>
 #endif
 
 struct process;
-struct spawn_params;
+typedef struct spawn_params
+{
+    lua_State *L;
+#ifdef _WIN32
+    const char *cmdline;
+    const char *environment;
+    STARTUPINFO si;
+#else
+    const char *command, **argv, **envp;
+    posix_spawn_file_actions_t redirect;
+    posix_spawnattr_t attr;
+#endif
+    stdioChannel* stdio[3];
+} spawn_params;
 
 int proc_create_meta(lua_State *L);
 
