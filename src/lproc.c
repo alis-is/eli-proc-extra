@@ -4,6 +4,7 @@
 #include "lspawn.h"
 #include "lutil.h"
 #include "lprocess.h"
+#include "pipe.h"
 
 #include <string.h>
 
@@ -21,6 +22,7 @@
 
 static void get_redirect(lua_State *L, const char *stdname, int idx, struct spawn_params *p) {
     stdioChannel* channel = malloc(sizeof(stdioChannel));
+    channel->fdToClose = -1;
     lua_getfield(L, idx, stdname);
     int stdioKind;
 
@@ -41,7 +43,7 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
     switch (lua_type(L, -1))
     {
         case LUA_TNIL: // default pipe
-            channel->kind = STDIO_CHANNEL_OWN_PIPE_KIND;
+            channel->kind = STDIO_CHANNEL_STREAM_KIND;
             break;
         case LUA_TSTRING:
             const char * kind = luaL_optstring(L, -1, "ignore"); // fallback to default pipe mode
@@ -55,31 +57,22 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                     spawn_param_redirect(p, stdioKind, stdioKind);
                 #endif
             } else if (strcmp(kind, "pipe") == 0) {
-                channel->kind = STDIO_CHANNEL_OWN_PIPE_KIND;
+                channel->kind = STDIO_CHANNEL_STREAM_KIND;
                 PIPE_DESCRIPTORS descriptors;
                 if (new_pipe(&descriptors) == -1) {
                     luaL_error(L, "Failed to create pipe!");
                     return;
                 };
-                /**
-                 * we always pass second file descriptor to child process
-                 * and use first one as ELI_PIPE_END
-                 * */
-                ELI_PIPE_END* pipeEnd = malloc(sizeof(ELI_PIPE_END));
+
+                ELI_STREAM* stream = new_stream();
+                stream->fd = descriptors.fd[STDIO_STDIN ? 1 : 0];
+                channel->stream = stream;
                 #ifdef _WIN32
-                    pipeEnd->h = descriptors.ph[0];
+                    spawn_param_redirect(p, stdioKind, _get_osfhandle(descriptors.fd[STDIO_STDIN ? 0 : 1]));
                 #else
-                    pipeEnd->fd = descriptors.fd[0];
+                    spawn_param_redirect(p, stdioKind, descriptors.fd[STDIO_STDIN ? 0 : 1]);
                 #endif
-                pipeEnd->mode = stdioKind == STDIO_STDIN ? "w" : "r";
-                channel->pipeEnd = pipeEnd;
-                #ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind, descriptors.ph[1]);
-                    CloseHandle(descriptors.ph[1]);
-                #else
-                    spawn_param_redirect(p, stdioKind, descriptors.fd[1]);
-                    close(descriptors.fd[1]);
-                #endif
+                channel->fdToClose = descriptors.fd[STDIO_STDIN ? 0 : 1]; 
             } else {
                 luaL_error(L, "Invalid stdio type: %s!");
                 return;
@@ -88,8 +81,18 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
         case LUA_TUSERDATA:
             lua_getmetatable(L, idx);
             luaL_getmetatable(L, LUA_FILEHANDLE);
-            luaL_getmetatable(L, PIPE_METATABLE);
-            if (lua_rawequal(L, -2, -3))
+            luaL_getmetatable(L, ELI_STREAM_RW_METATABLE);
+            switch(stdioKind) {
+                case STDIO_STDIN:
+                    luaL_getmetatable(L, ELI_STREAM_W_METATABLE);
+                    break;
+                case STDIO_STDOUT:
+                case STDIO_STDERR:
+                    luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
+                    break;
+            }
+            
+            if (lua_rawequal(L, -3, -4))
             { // file
                 lua_pop(L, lua_gettop(L) - top);
                 luaL_Stream *fh = (luaL_Stream *)luaL_checkudata(L, -1, "FILE*");
@@ -99,35 +102,34 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                     return;
                 }
                 
-                channel->kind = STDIO_CHANNEL_FILE_KIND;
+                channel->kind = STDIO_CHANNEL_EXTERNAL_FILE_KIND;
                 channel->file = fh;
                 #ifdef _WIN32
                     spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(_fileno(fh)));
                 #else
                     spawn_param_redirect(p, stdioKind, fileno(fh->f));
-
                 #endif
             }
-            if (lua_rawequal(L, -1, -3))
+            if (lua_rawequal(L, -1, -4) || lua_rawequal(L, -2, -4))
             { // eli pipe
                 lua_pop(L, lua_gettop(L) - top);
-                ELI_PIPE_END *_pipe = (ELI_PIPE_END *)luaL_checkudata(L, -1, "ELI_PIPE_END");
-                if (_pipe->closed)
+                ELI_STREAM *stream = (ELI_STREAM *)lua_touserdata(L, -1);
+                if (stream->closed)
                 {
                     luaL_error(L, "%s: closed pipe");
                     return;
                 }
                 
-                channel->kind = STDIO_CHANNEL_PIPE_END_KIND;
-                channel->pipeEnd = _pipe;
+                channel->kind = STDIO_CHANNEL_EXTERNAL_STREAM_KIND;
+                channel->stream = stream;
                 #ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind, _pipe->h);
+                    spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(stream->fd));
                 #else
-                    spawn_param_redirect(p, stdioKind, _pipe->fd);
+                    spawn_param_redirect(p, stdioKind, stream->fd);
                 #endif
             }
             lua_pop(L, lua_gettop(L) - top);
-            luaL_typeerror(L, -1, "FILE*/ELI_PIPE_END");
+            luaL_typeerror(L, -1, "FILE*/ELI_STREAM");
             break;
     }
 

@@ -2,6 +2,7 @@
 #include "lauxlib.h"
 #include "lutil.h"
 #include "lprocess.h"
+#include "lspawn.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -177,17 +178,20 @@ static int process_exited(lua_State *L)
     return 1;
 }
 
-static int process_write_stdin(lua_State *L)
+static int process_get_stdin(lua_State *L)
 {
     struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-    switch(p->stdio[STDIO_STDIN]->kind) 
+    stdioChannel* channel = p->stdio[STDIO_STDIN];
+    switch(channel->kind) 
     {
-        case STDIO_CHANNEL_OWN_PIPE_KIND:
-        case STDIO_CHANNEL_PIPE_END_KIND:
-            // TODO: stream_write()
-            break;
-        case STDIO_CHANNEL_FILE_KIND:
-            // TODO: stream_write()
+        case STDIO_CHANNEL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            stream->closed = channel->stream->closed;
+            stream->fd = dup(channel->stream->fd);
+            stream->nonblocking = channel->stream->nonblocking;
+            luaL_getmetatable(L, ELI_STREAM_W_METATABLE);
+            lua_setmetatable(L, -2);
             break;
         default:
             lua_pushnil(L);
@@ -196,17 +200,20 @@ static int process_write_stdin(lua_State *L)
     return 1;
 }
 
-static int process_read_stdout(lua_State *L)
+static int process_get_stdout(lua_State *L)
 {
-    process *p = (process *)lua_touserdata(L, 1);
-    switch(p->stdio[STDIO_STDOUT]->kind) 
+    struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+    stdioChannel* channel = p->stdio[STDIO_STDOUT];
+    switch(channel->kind) 
     {
-        case STDIO_CHANNEL_OWN_PIPE_KIND:
-        case STDIO_CHANNEL_PIPE_END_KIND:
-            // TODO: stream_read()
-            break;
-        case STDIO_CHANNEL_FILE_KIND:
-            // TODO: stream_read()
+        case STDIO_CHANNEL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            stream->closed = channel->stream->closed;
+            stream->fd = dup(channel->stream->fd);
+            stream->nonblocking = channel->stream->nonblocking;
+            luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
+            lua_setmetatable(L, -2);
             break;
         default:
             lua_pushnil(L);
@@ -215,17 +222,20 @@ static int process_read_stdout(lua_State *L)
     return 1;
 }
 
-static int process_read_stderr(lua_State *L)
+static int process_get_stderr(lua_State *L)
 {
-    process *p = (process *)lua_touserdata(L, 1);
-    switch(p->stdio[STDIO_STDERR]->kind) 
+    struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+    stdioChannel* channel = p->stdio[STDIO_STDERR];
+    switch(channel->kind) 
     {
-        case STDIO_CHANNEL_OWN_PIPE_KIND:
-        case STDIO_CHANNEL_PIPE_END_KIND:
-            // TODO: stream_read()
-            break;
-        case STDIO_CHANNEL_FILE_KIND:
-            // TODO: stream_read()
+        case STDIO_CHANNEL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            stream->closed = channel->stream->closed;
+            stream->fd = dup(channel->stream->fd);
+            stream->nonblocking = channel->stream->nonblocking;
+            luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
+            lua_setmetatable(L, -2);
             break;
         default:
             lua_pushnil(L);
@@ -240,10 +250,11 @@ static const char * get_channel_kind_alias(stdioChannel * channel)
     {
         case STDIO_CHANNEL_INHERIT_KIND:
             return "inherit";
-        case STDIO_CHANNEL_OWN_PIPE_KIND:
-        case STDIO_CHANNEL_PIPE_END_KIND:
+        case STDIO_CHANNEL_STREAM_KIND:
             return "pipe";
-        case STDIO_CHANNEL_FILE_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+            return "external";
+        case STDIO_CHANNEL_EXTERNAL_FILE_KIND:
             return "file";
         case STDIO_CHANNEL_IGNORE_KIND:
             return "ignore";
@@ -261,19 +272,6 @@ static int process_stdio_info(lua_State *L)
     lua_pushstring(L, get_channel_kind_alias(p->stdio[STDIO_STDERR]));
     lua_setfield(L, -2, "stderr");
     return 1;
-}
-
-static int close_stdio_channel(stdioChannel* channel) 
-{
-    if (channel->kind == STDIO_CHANNEL_OWN_PIPE_KIND) {
-        #ifdef _WIN32
-            CloseHandle(channel->pipeEnd->h);
-        #else
-            close(channel->pipeEnd->fd);
-        #endif
-        free(channel->pipeEnd);
-    }
-    free(channel);
 }
 
 static int process_close(lua_State *L)
@@ -308,12 +306,12 @@ int process_create_meta(lua_State *L)
     lua_pushcfunction(L, process_exitcode);
     lua_setfield(L, -2, "get_exitcode");
 
-    lua_pushcfunction(L, process_write_stdin);
-    lua_setfield(L, -2, "write_stdin");
-    lua_pushcfunction(L, process_read_stdout);
-    lua_setfield(L, -2, "read_stdout");
-    lua_pushcfunction(L, process_read_stderr);
-    lua_setfield(L, -2, "read_stderr");
+    lua_pushcfunction(L, process_get_stdin);
+    lua_setfield(L, -2, "get_stdin");
+    lua_pushcfunction(L, process_get_stdout);
+    lua_setfield(L, -2, "get_stdout");
+    lua_pushcfunction(L, process_get_stderr);
+    lua_setfield(L, -2, "get_stderr");
     lua_pushcfunction(L, process_stdio_info);
     lua_setfield(L, -2, "get_stdio_info");
 

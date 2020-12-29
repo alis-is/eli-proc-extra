@@ -6,12 +6,29 @@
 #include <unistd.h>
 #endif
 
-#ifdef _WIN32
-int stream_write(lua_State *L, HANDLE h, const char * data, size_t datasize, int nonblocking);
-int stream_read_bytes(lua_State *L, HANDLE fd, size_t length) ;
-int stream_read(lua_State *L, HANDLE fd, const char * opt, int nonblocking);
-#else
-int stream_write(lua_State *L, int fd, const char * data, size_t datasize, int nonblocking);
-int stream_read_bytes(lua_State *L, int fd, size_t length) ;
+#define ELI_STREAM_R_METATABLE "ELI_STREAM_R_METATABLE"
+#define ELI_STREAM_W_METATABLE "ELI_STREAM_W_METATABLE"
+#define ELI_STREAM_RW_METATABLE "ELI_STREAM_RW_METATABLE"
+
+typedef struct ELI_STREAM
+{
+    int fd;
+    int closed;
+    int nonblocking;
+} ELI_STREAM;
+
+typedef enum ELI_STREAM_KIND {
+    ELI_STREAM_R_KIND,
+    ELI_STREAM_W_KIND,
+    ELI_STREAM_RW_KIND,
+    ELI_STREAM_INVALID_KIND
+} ELI_STREAM_KIND;
+
 int stream_read(lua_State *L, int fd, const char * opt, int nonblocking);
-#endif
+int stream_read_bytes(lua_State *L, int fd, size_t length, int nonblocking);
+int stream_write(lua_State *L, int fd, const char * data, size_t datasize);
+int stream_is_nonblocking(int fd);
+int stream_set_nonblocking(int fd, int nonblocking);
+int stream_as_filestream(lua_State *L, int fd, const char * mode);
+int stream_close(int fd);
+ELI_STREAM * new_stream();

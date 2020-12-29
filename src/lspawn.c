@@ -35,6 +35,8 @@ static int add_argument(luaL_Buffer *b, const char *s)
     luaL_addchar(b, '"');
     return oddbs;
 }
+
+#define close _close
 #endif
 
 spawn_params *spawn_param_init(lua_State *L)
@@ -259,10 +261,27 @@ void spawn_param_redirect(spawn_params *p, int d, int fd)
 }
 #endif
 
+static void close_toClose(stdioChannel * channel) 
+{
+    if (channel->fdToClose >= 0) {
+        channel->fdToClose = -1;
+        close(channel->fdToClose);
+    }
+}
+
+int close_stdio_channel(stdioChannel* channel) 
+{
+    if (channel->kind == STDIO_CHANNEL_STREAM_KIND) {
+        close(channel->stream->fd);
+        free(channel->stream);
+    }
+    free(channel);
+}
+
 int spawn_param_execute(spawn_params *p)
 {
     lua_State *L = p->L;
-    int ret;
+    int success = 0;
     struct process *proc;
 #ifdef _WIN32
     char *c, *e;
@@ -288,22 +307,36 @@ int spawn_param_execute(spawn_params *p)
 #ifdef _WIN32
     c = strdup(p->cmdline);
     e = (char *)p->environment; /* strdup(p->environment); */
-    ret = CreateProcess(0, c, 0, 0, TRUE, 0, e, 0, &p->si, &pi);
+    success = CreateProcess(0, c, 0, 0, TRUE, 0, e, 0, &p->si, &pi) != 0;
     free(c);
 
-    if (!ret)
-        return windows_pusherror(L, GetLastError(), -2);
-    proc->hProcess = pi.hProcess;
-    proc->dwProcessId = pi.dwProcessId;
-    return 1;
+    if (success) {
+        proc->hProcess = pi.hProcess;
+        proc->dwProcessId = pi.dwProcessId;
+    }
 #else
     errno = 0;
-
-    ret = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
-                       (char *const *)p->argv, (char *const *)p->envp);
-    posix_spawn_file_actions_destroy(&p->redirect);
-    posix_spawnattr_destroy(&p->attr);
-    return ret != 0 /*|| errno != 0*/ ? push_error(L, NULL) : 1;
+    success = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
+                       (char *const *)p->argv, (char *const *)p->envp) == 0;
+    if (success) {
+        posix_spawn_file_actions_destroy(&p->redirect);
+        posix_spawnattr_destroy(&p->attr);
+    }
 #endif
+
     free(p);
+    close_toClose(p->stdio[STDIO_STDIN]);
+    close_toClose(p->stdio[STDIO_STDOUT]);
+    close_toClose(p->stdio[STDIO_STDERR]);
+    if (!success) {
+        close_stdio_channel(p->stdio[STDIO_STDIN]);
+        close_stdio_channel(p->stdio[STDIO_STDOUT]);
+        close_stdio_channel(p->stdio[STDIO_STDERR]);
+#ifdef _WIN32
+        return windows_pusherror(L, GetLastError(), -2);
+#else
+        return push_error(L, NULL);
+#endif
+    }
+    return 1;
 }

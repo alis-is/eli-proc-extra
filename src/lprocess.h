@@ -1,5 +1,5 @@
 #include "lua.h"
-#include "pipe.h"
+#include "stream.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -13,20 +13,16 @@
 
 typedef enum stdioChannelKind {
     STDIO_CHANNEL_INHERIT_KIND,
-    STDIO_CHANNEL_OWN_PIPE_KIND,
-    STDIO_CHANNEL_PIPE_END_KIND, 
-    STDIO_CHANNEL_FILE_KIND,
+    STDIO_CHANNEL_STREAM_KIND,
+    STDIO_CHANNEL_EXTERNAL_STREAM_KIND,
+    STDIO_CHANNEL_EXTERNAL_FILE_KIND,
     STDIO_CHANNEL_IGNORE_KIND
 } stdioChannelKind;
 
 typedef struct stdioChannel {
     stdioChannelKind kind;
-    ELI_PIPE_END *pipeEnd;
-#ifdef _WIN32    
-    
-#else
-    pid_t pid;
-#endif
+    ELI_STREAM *stream;
+    int fdToClose;
     luaL_Stream *file;
 } stdioChannel;
 
