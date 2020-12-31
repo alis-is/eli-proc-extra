@@ -1,8 +1,9 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lutil.h"
-#include "lprocess.h"
 #include "lspawn.h"
+#include "lprocess.h"
+#include "lstream.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #endif
-#include "stream.h"
+//#include "stream.h" passed from spawn.h
 
 /* proc -- pid */
 static int process_pid(lua_State *L)
@@ -43,7 +44,11 @@ static int process_wait(lua_State *L)
 #else
         int status = 0;
         int res = waitpid(p->pid, &status, WNOHANG);
-        if (interval > 0)
+        if (p->pid = res)
+        {
+            p->status = WEXITSTATUS(status);
+        }
+        else if (interval > 0)
         {
             int elapsed = 0;
             while (p->status == -1 && elapsed < interval)
@@ -182,13 +187,14 @@ static int process_get_stdin(lua_State *L)
 {
     struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     stdioChannel* channel = p->stdio[STDIO_STDIN];
-    switch(channel->kind) 
+    switch(channel->kind)
     {
         case STDIO_CHANNEL_STREAM_KIND:
-        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
             ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
             stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
+            stream->fd = channel->stream->fd;
+            stream->notDisposable = 1;
             stream->nonblocking = channel->stream->nonblocking;
             luaL_getmetatable(L, ELI_STREAM_W_METATABLE);
             lua_setmetatable(L, -2);
@@ -204,13 +210,14 @@ static int process_get_stdout(lua_State *L)
 {
     struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     stdioChannel* channel = p->stdio[STDIO_STDOUT];
-    switch(channel->kind) 
+    switch(channel->kind)
     {
         case STDIO_CHANNEL_STREAM_KIND:
-        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
             ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
             stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
+            stream->fd = channel->stream->fd;
+            stream->notDisposable = 1;
             stream->nonblocking = channel->stream->nonblocking;
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
@@ -226,13 +233,14 @@ static int process_get_stderr(lua_State *L)
 {
     struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     stdioChannel* channel = p->stdio[STDIO_STDERR];
-    switch(channel->kind) 
+    switch(channel->kind)
     {
         case STDIO_CHANNEL_STREAM_KIND:
-        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
+        case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
             ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
             stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
+            stream->fd = channel->stream->fd;
+            stream->notDisposable = 1;
             stream->nonblocking = channel->stream->nonblocking;
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
@@ -246,7 +254,7 @@ static int process_get_stderr(lua_State *L)
 
 static const char * get_channel_kind_alias(stdioChannel * channel) 
 {
-    switch(channel->kind) 
+    switch(channel->kind)
     {
         case STDIO_CHANNEL_INHERIT_KIND:
             return "inherit";
@@ -289,6 +297,7 @@ static int process_close(lua_State *L)
 */
 int process_create_meta(lua_State *L)
 {
+    luaopen_eli_stream_extra(L);
     luaL_newmetatable(L, PROCESS_METATABLE);
 
     /* Method table */

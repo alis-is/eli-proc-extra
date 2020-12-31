@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "lua.h"
+#include "stdioChannel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -39,8 +40,4 @@ void spawn_param_redirect(spawn_params *p, int d, int fd);
 #endif
 int spawn_param_execute(struct spawn_params *p);
 
-int process_pid(lua_State *L);
-int process_wait(lua_State *L);
-int process_kill(lua_State *L);
-int process_tostring(lua_State *L);
 int close_stdio_channel(stdioChannel* channel);

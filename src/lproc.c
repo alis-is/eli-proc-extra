@@ -7,6 +7,7 @@
 #include "pipe.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -20,10 +21,11 @@
 #define SLEEP_MULTIPLIER 1e6
 #endif
 
-static void get_redirect(lua_State *L, const char *stdname, int idx, struct spawn_params *p) {
+static int get_redirect(lua_State *L, const char *stdname, int idx, struct spawn_params *p) {
     stdioChannel* channel = malloc(sizeof(stdioChannel));
     channel->fdToClose = -1;
     lua_getfield(L, idx, stdname);
+
     int stdioKind;
 
     switch (stdname[3])
@@ -42,42 +44,45 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
     int top = lua_gettop(L);
     switch (lua_type(L, -1))
     {
-        case LUA_TNIL: // default pipe
-            channel->kind = STDIO_CHANNEL_STREAM_KIND;
-            break;
-        case LUA_TSTRING:
-            const char * kind = luaL_optstring(L, -1, "ignore"); // fallback to default pipe mode
-            if (strcmp(kind, "ignore") == 0) {
-                channel->kind = STDIO_CHANNEL_IGNORE_KIND;
-            } else if (strcmp(kind, "inherit") == 0) {
-                channel->kind = STDIO_CHANNEL_INHERIT_KIND;
-                #ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind, GetStdHandle(-10 + (-1 * stdioKind)));
-                #else
-                    spawn_param_redirect(p, stdioKind, stdioKind);
-                #endif
-            } else if (strcmp(kind, "pipe") == 0) {
-                channel->kind = STDIO_CHANNEL_STREAM_KIND;
-                PIPE_DESCRIPTORS descriptors;
-                if (new_pipe(&descriptors) == -1) {
-                    luaL_error(L, "Failed to create pipe!");
-                    return;
-                };
+        case LUA_TNIL: // fall through
+        case LUA_TSTRING: ;
+            static const char * lst[] = { "ignore", "inherit", "pipe", NULL };
+            enum {IGNORE, INHERIT, PIPE};
+            int kind = luaL_checkoption(L, -1, "pipe", lst); // fallback to default pipe mode
+            switch(kind) {
+                case IGNORE:
+                   channel->kind = STDIO_CHANNEL_IGNORE_KIND;
+                   break;
+                case INHERIT:
+                   channel->kind = STDIO_CHANNEL_INHERIT_KIND;
+                   #ifdef _WIN32
+                       spawn_param_redirect(p, stdioKind, GetStdHandle(-10 + (-1 * stdioKind)));
+                   #else
+                       spawn_param_redirect(p, stdioKind, stdioKind);
+                   #endif
+                   break;
+                case PIPE:
+                   channel->kind = STDIO_CHANNEL_STREAM_KIND;
+                   PIPE_DESCRIPTORS descriptors;
+                   if (new_pipe(&descriptors) == -1) {
+                       return push_error(L, "Failed to create pipe!");
+                   };
 
-                ELI_STREAM* stream = new_stream();
-                stream->fd = descriptors.fd[STDIO_STDIN ? 1 : 0];
-                channel->stream = stream;
-                #ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind, _get_osfhandle(descriptors.fd[STDIO_STDIN ? 0 : 1]));
-                #else
-                    spawn_param_redirect(p, stdioKind, descriptors.fd[STDIO_STDIN ? 0 : 1]);
-                #endif
-                channel->fdToClose = descriptors.fd[STDIO_STDIN ? 0 : 1]; 
-            } else {
-                luaL_error(L, "Invalid stdio type: %s!");
-                return;
+                   ELI_STREAM* stream = new_stream();
+                   stream->fd = descriptors.fd[stdioKind == STDIO_STDIN ? 1 : 0];
+                   channel->stream = stream;
+                   #ifdef _WIN32
+                       spawn_param_redirect(p, stdioKind, _get_osfhandle(descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
+                   #else
+                       spawn_param_redirect(p, stdioKind, descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]);
+                   #endif
+                   channel->fdToClose = descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1 ];
+                   break;
+                default:
+                   luaL_error(L, "Invalid stdio type: %s!");
+                   return 1;
             }
-            break;      
+            break;
         case LUA_TUSERDATA:
             lua_getmetatable(L, idx);
             luaL_getmetatable(L, LUA_FILEHANDLE);
@@ -91,7 +96,7 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                     luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
                     break;
             }
-            
+
             if (lua_rawequal(L, -3, -4))
             { // file
                 lua_pop(L, lua_gettop(L) - top);
@@ -99,9 +104,9 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                 if (fh->closef == 0 || fh->f == NULL)
                 {
                     luaL_error(L, "%s: closed file");
-                    return;
+                    return 1;
                 }
-                
+
                 channel->kind = STDIO_CHANNEL_EXTERNAL_FILE_KIND;
                 channel->file = fh;
                 #ifdef _WIN32
@@ -110,16 +115,16 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                     spawn_param_redirect(p, stdioKind, fileno(fh->f));
                 #endif
             }
-            if (lua_rawequal(L, -1, -4) || lua_rawequal(L, -2, -4))
+            else if (lua_rawequal(L, -1, -4) || lua_rawequal(L, -2, -4))
             { // eli pipe
                 lua_pop(L, lua_gettop(L) - top);
                 ELI_STREAM *stream = (ELI_STREAM *)lua_touserdata(L, -1);
                 if (stream->closed)
                 {
                     luaL_error(L, "%s: closed pipe");
-                    return;
+                    return 1;
                 }
-                
+
                 channel->kind = STDIO_CHANNEL_EXTERNAL_STREAM_KIND;
                 channel->stream = stream;
                 #ifdef _WIN32
@@ -128,31 +133,33 @@ static void get_redirect(lua_State *L, const char *stdname, int idx, struct spaw
                     spawn_param_redirect(p, stdioKind, stream->fd);
                 #endif
             }
-            lua_pop(L, lua_gettop(L) - top);
-            luaL_typeerror(L, -1, "FILE*/ELI_STREAM");
-            break;
+            else
+            {
+               lua_pop(L, lua_gettop(L) - top);
+               luaL_typeerror(L, -1, "FILE*/ELI_STREAM");
+               return 1;
+            }
     }
 
     p->stdio[stdioKind] = channel;
     lua_pop(L, 1);
-    return;
+    return 0;
 }
 
-static void get_redirects(lua_State *L, int idx, struct spawn_params *p) {
+static int get_redirects(lua_State *L, int idx, struct spawn_params *p) {
     lua_getfield(L, idx, "stdio");
+
     // pipe, inherit, ignore are supported values
     switch (lua_type(L, -1))
     {
         default:
-            return luaL_error(L, "bad args option (table expected, got %s)",
+            luaL_error(L, "bad args option (table expected, got %s)",
                                 luaL_typename(L, -1));
+            return 1;
         case LUA_TNIL:
             // fall through
-        case LUA_TSTRING: 
+        case LUA_TSTRING: ;
             const char* stdio = luaL_optstring(L, -1, "pipe");
-            stdout = stdio;
-            stderr = stdio;
-            stdin = stdio;
             lua_pop(L, 1);
             // rebuild string to table
             lua_newtable(L);
@@ -166,11 +173,15 @@ static void get_redirects(lua_State *L, int idx, struct spawn_params *p) {
         case LUA_TTABLE:
             break;
     }
-    get_redirect(L, "stdin", -1, p);
-    get_redirect(L, "stdout", -1, p);
-    get_redirect(L, "stderr", -1, p);
-
+    int res;
+    res = get_redirect(L, "stdin", -1, p);
+    if (res) return res;
+    res = get_redirect(L, "stdout", -1, p);
+    if (res) return res;
+    res = get_redirect(L, "stderr", -1, p);
+    if (res) return res;
     lua_pop(L, 1);
+    return 0;
 }
 
 /* filename [args-opts] -- proc/nil error */
@@ -257,7 +268,10 @@ static int eli_spawn(lua_State *L)
             spawn_param_env(params); /* cmd opts ... */
             break;
         }
-        get_redirects(L, 2, params);  /* cmd opts ... */
+        int err_count = get_redirects(L, 2, params);  /* cmd opts ... */
+        if (err_count > 0) {
+            return err_count;
+        }
     }
     return spawn_param_execute(params); /* proc/nil error */
 }
