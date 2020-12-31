@@ -1,4 +1,5 @@
 #include "lua.h"
+#include "stdioChannel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -15,6 +16,7 @@ typedef struct process
 #else
     pid_t pid;
 #endif
+    stdioChannel* stdio[3];
 } process;
 
 #define PROCESS_METATABLE "ELI_PROCESS"

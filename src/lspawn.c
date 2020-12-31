@@ -6,29 +6,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include "environ.h"
-
-#include <unistd.h>
-#include <spawn.h>
-#endif
-
-struct spawn_params
-{
-    lua_State *L;
-#ifdef _WIN32
-    const char *cmdline;
-    const char *environment;
-    STARTUPINFO si;
-#else
-    const char *command, **argv, **envp;
-    posix_spawn_file_actions_t redirect;
-    posix_spawnattr_t attr;
-#endif
-};
+#include "lspawn.h"
 
 #ifdef _WIN32
 /* quotes and adds argument string to b */
@@ -57,11 +35,13 @@ static int add_argument(luaL_Buffer *b, const char *s)
     luaL_addchar(b, '"');
     return oddbs;
 }
+
+#define close _close
 #endif
 
-struct spawn_params *spawn_param_init(lua_State *L)
+spawn_params *spawn_param_init(lua_State *L)
 {
-    struct spawn_params *p = lua_newuserdata(L, sizeof *p);
+    spawn_params *p = lua_newuserdata(L, sizeof *p);
 #ifdef _WIN32
     static const STARTUPINFO si = {sizeof si};
     p->L = L;
@@ -74,10 +54,13 @@ struct spawn_params *spawn_param_init(lua_State *L)
     posix_spawn_file_actions_init(&p->redirect);
     posix_spawnattr_init(&p->attr);
 #endif
+    p->stdio[STDIO_STDIN] = NULL;
+    p->stdio[STDIO_STDOUT] = NULL;
+    p->stdio[STDIO_STDERR] = NULL;
     return p;
 }
 
-void spawn_param_filename(struct spawn_params *p, const char *filename)
+void spawn_param_filename(spawn_params *p, const char *filename)
 {
 #ifdef _WIN32
     lua_State *L = p->L;
@@ -156,7 +139,7 @@ static char *to_win_argv(lua_State *L, const char **argv)
 #endif
 
 /* ... argtab -- ... argtab vector */
-void spawn_param_args(struct spawn_params *p)
+void spawn_param_args(spawn_params *p)
 {
     lua_State *L = p->L;
     const char **argv = get_argv(L); // cmd opts argv
@@ -235,7 +218,7 @@ static char *to_win_env(lua_State *L, const char **env)
 }
 #endif
 
-void spawn_param_env(struct spawn_params *p)
+void spawn_param_env(spawn_params *p)
 {
     lua_State *L = p->L;
     const char **env = get_env(L);
@@ -247,7 +230,7 @@ void spawn_param_env(struct spawn_params *p)
 }
 
 #ifdef _WIN32
-void spawn_param_redirect(struct spawn_params *p, const char *stdname, HANDLE h)
+void spawn_param_redirect(spawn_params *p, int d, HANDLE h)
 {
     SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     if (!(p->si.dwFlags & STARTF_USESTDHANDLES))
@@ -257,43 +240,48 @@ void spawn_param_redirect(struct spawn_params *p, const char *stdname, HANDLE h)
         p->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
         p->si.dwFlags |= STARTF_USESTDHANDLES;
     }
-    switch (stdname[3])
+    switch (d)
     {
-    case 'i':
+    case STDIO_STDIN:
         p->si.hStdInput = h;
         break;
-    case 'o':
+    case STDIO_STDOUT:
         p->si.hStdOutput = h;
         break;
-    case 'e':
+    case STDIO_STDERR:
         p->si.hStdError = h;
         break;
     }
+    spawn_param_redirect_raw(p, stdname, h);
 }
 #else
-void spawn_param_redirect(struct spawn_params *p, const char *stdname, int fd)
+void spawn_param_redirect(spawn_params *p, int d, int fd) 
 {
-    int d;
-    switch (stdname[3])
-    {
-    case 'i':
-        d = STDIN_FILENO;
-        break;
-    case 'o':
-        d = STDOUT_FILENO;
-        break;
-    case 'e':
-        d = STDERR_FILENO;
-        break;
-    }
     posix_spawn_file_actions_adddup2(&p->redirect, fd, d);
 }
 #endif
 
-int spawn_param_execute(struct spawn_params *p)
+static void close_toClose(stdioChannel* channel) 
+{
+    if (channel->fdToClose >= 0) {
+        close(channel->fdToClose);
+        channel->fdToClose = -1;
+    }
+}
+
+int close_stdio_channel(stdioChannel* channel) 
+{
+    if (channel->kind == STDIO_CHANNEL_STREAM_KIND) {
+        close(channel->stream->fd);
+        free(channel->stream);
+    }
+    free(channel);
+}
+
+int spawn_param_execute(spawn_params *p)
 {
     lua_State *L = p->L;
-    int ret;
+    int success = 0;
     struct process *proc;
 #ifdef _WIN32
     char *c, *e;
@@ -305,32 +293,49 @@ int spawn_param_execute(struct spawn_params *p)
         p->argv[0] = p->command;
         p->argv[1] = 0;
     }
-    if (!p->envp)
+    if (p->envp == 0)
         p->envp = (const char **)environ;
 #endif
     proc = lua_newuserdata(L, sizeof *proc);
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;
+    proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
+    proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
+    proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
 
 #ifdef _WIN32
     c = strdup(p->cmdline);
     e = (char *)p->environment; /* strdup(p->environment); */
-    ret = CreateProcess(0, c, 0, 0, TRUE, 0, e, 0, &p->si, &pi);
+    success = CreateProcess(0, c, 0, 0, TRUE, 0, e, 0, &p->si, &pi) != 0;
     free(c);
 
-    if (!ret)
-        return windows_pusherror(L, GetLastError(), -2);
-    proc->hProcess = pi.hProcess;
-    proc->dwProcessId = pi.dwProcessId;
-    return 1;
+    if (success == 1) {
+        proc->hProcess = pi.hProcess;
+        proc->dwProcessId = pi.dwProcessId;
+    }
 #else
     errno = 0;
-
-    ret = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
-                       (char *const *)p->argv, (char *const *)p->envp);
-    posix_spawn_file_actions_destroy(&p->redirect);
-    posix_spawnattr_destroy(&p->attr);
-    return ret != 0 /*|| errno != 0*/ ? push_error(L, NULL) : 1;
+    success = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
+                       (char *const *)p->argv, (char *const *)p->envp) == 0;
+    if (success == 1) {
+        posix_spawn_file_actions_destroy(&p->redirect);
+        posix_spawnattr_destroy(&p->attr);
+    }
 #endif
+    close_toClose(p->stdio[STDIO_STDIN]);
+    close_toClose(p->stdio[STDIO_STDOUT]);
+    close_toClose(p->stdio[STDIO_STDERR]);
+
+    if (success != 1) {
+        close_stdio_channel(p->stdio[STDIO_STDIN]);
+        close_stdio_channel(p->stdio[STDIO_STDOUT]);
+        close_stdio_channel(p->stdio[STDIO_STDERR]);
+#ifdef _WIN32
+        return windows_pusherror(L, GetLastError(), -2);
+#else
+        return push_error(L, NULL);
+#endif
+    }
+    return 1;
 }
