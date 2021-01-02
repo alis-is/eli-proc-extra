@@ -20,11 +20,18 @@
 static int process_pid(lua_State *L)
 {
     struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-#ifdef _WIN32
-    lua_pushnumber(L, p->dwProcessId);
-#else
-    lua_pushnumber(L, p->pid);
-#endif
+    if (p->status == -1)
+    {
+    #ifdef _WIN32
+        lua_pushnumber(L, p->dwProcessId);
+    #else
+        lua_pushnumber(L, p->pid);
+    #endif
+    } 
+    else 
+    {
+        lua_pushnumber(L, -1);
+    }
     return 1;
 }
 
