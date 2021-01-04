@@ -231,6 +231,7 @@ static int process_get_stdout(lua_State *L)
             lua_setmetatable(L, -2);
             break;
         case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
+            lua_pop(L, 1); //remove process from stack
             luaL_requiref(L, "io", luaopen_io, 0);
             lua_getfield(L, 2, "open");
             lua_replace(L, 2);;
@@ -262,6 +263,7 @@ static int process_get_stderr(lua_State *L)
             lua_setmetatable(L, -2);
             break;
         case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
+            lua_pop(L, 1); //remove process from stack
             luaL_requiref(L, "io", luaopen_io, 0);
             lua_getfield(L, 2, "open");
             lua_replace(L, 2);;
