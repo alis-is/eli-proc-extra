@@ -236,8 +236,8 @@ static int process_get_stdout(lua_State *L)
             lua_replace(L, 2);;
             lua_pushstring(L, channel->path);
             lua_pushstring(L, "r");
-            lua_call(L, 2, 3);
-            return lua_isnil(L, 2) ? 3 : 1; 
+            lua_call(L, 2, LUA_MULTRET);
+            return lua_gettop(L);
         default:
             lua_pushnil(L);
             break;
@@ -267,8 +267,8 @@ static int process_get_stderr(lua_State *L)
             lua_replace(L, 2);;
             lua_pushstring(L, channel->path);
             lua_pushstring(L, "r");
-            lua_call(L, 2, 3);
-            return lua_isnil(L, 2) ? 3 : 1; 
+            lua_call(L, 2, LUA_MULTRET);
+            return lua_gettop(L);
         default:
             lua_pushnil(L);
             break;
