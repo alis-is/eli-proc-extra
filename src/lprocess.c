@@ -210,8 +210,8 @@ static int process_get_stdout(lua_State *L) {
   case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
     lua_pop(L, 1); // remove process from stack
     luaL_requiref(L, "io", luaopen_io, 0);
-    lua_getfield(L, 2, "open");
-    lua_replace(L, 2);
+    lua_getfield(L, 1, "open");
+    lua_replace(L, 1);
     ;
     lua_pushstring(L, channel->path);
     lua_pushstring(L, "r");
@@ -241,8 +241,8 @@ static int process_get_stderr(lua_State *L) {
   case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
     lua_pop(L, 1); // remove process from stack
     luaL_requiref(L, "io", luaopen_io, 0);
-    lua_getfield(L, 2, "open");
-    lua_replace(L, 2);
+    lua_getfield(L, 1, "open");
+    lua_replace(L, 1);
     ;
     lua_pushstring(L, channel->path);
     lua_pushstring(L, "r");
