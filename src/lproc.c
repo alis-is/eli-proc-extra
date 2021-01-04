@@ -212,6 +212,9 @@ static int get_redirects(lua_State *L, int idx, struct spawn_params *p) {
         case LUA_TNIL:
             // fall through
         case LUA_TSTRING: ;
+            static const char * lst[] = { "ignore", "inherit", "pipe",  NULL };
+            enum {IGNORE, INHERIT, PIPE};
+            luaL_checkoption(L, -1, "pipe", lst); // force only limited set of strings
             const char* stdio = luaL_optstring(L, -1, "pipe");
             lua_pop(L, 1);
             // rebuild string to table
