@@ -41,7 +41,7 @@ static int add_argument(luaL_Buffer *b, const char *s)
 
 spawn_params *spawn_param_init(lua_State *L)
 {
-    spawn_params *p = lua_newuserdata(L, sizeof *p);
+    spawn_params *p = lua_newuserdatauv(L, sizeof *p, 0);
 #ifdef _WIN32
     static const STARTUPINFO si = {sizeof si};
     p->L = L;
@@ -93,7 +93,7 @@ static const char **get_argv(lua_State *L)
     size_t i;
     size_t n = lua_rawlen(L, -1);
 
-    const char **argv = lua_newuserdata(L, (n + 2) * sizeof *argv);
+    const char **argv = lua_newuserdatauv(L, (n + 2) * sizeof *argv, 0);
 
     for (i = 1; i <= n; i++)
     {
@@ -165,7 +165,7 @@ static const char **get_env(lua_State *L)
         n++;
     } // envtab
 
-    const char **env = lua_newuserdata(L, (n + 1) * sizeof *env); // envtab nil env
+    const char **env = lua_newuserdatauv(L, (n + 1) * sizeof *env, 0); // envtab nil env
     lua_pushnil(L);                                               // envtab env nil
 
     for (i = 0; lua_next(L, -3); i++)
@@ -289,14 +289,14 @@ int spawn_param_execute(spawn_params *p)
 #else
     if (!p->argv)
     {
-        p->argv = lua_newuserdata(L, 2 * sizeof *p->argv);
+        p->argv = lua_newuserdatauv(L, 2 * sizeof *p->argv, 0);
         p->argv[0] = p->command;
         p->argv[1] = 0;
     }
     if (p->envp == 0)
         p->envp = (const char **)environ;
 #endif
-    proc = lua_newuserdata(L, sizeof *proc);
+    proc = lua_newuserdatauv(L, sizeof *proc, 0);
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;

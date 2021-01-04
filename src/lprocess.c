@@ -1,5 +1,6 @@
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 #include "lutil.h"
 #include "lspawn.h"
 #include "lprocess.h"
@@ -198,7 +199,7 @@ static int process_get_stdin(lua_State *L)
     {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
-            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            ELI_STREAM * stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
             stream->closed = channel->stream->closed;
             stream->fd = channel->stream->fd;
             stream->notDisposable = 1;
@@ -221,7 +222,7 @@ static int process_get_stdout(lua_State *L)
     {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
-            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            ELI_STREAM * stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
             stream->closed = channel->stream->closed;
             stream->fd = channel->stream->fd;
             stream->notDisposable = 1;
@@ -229,6 +230,14 @@ static int process_get_stdout(lua_State *L)
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
             break;
+        case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
+            luaL_requiref(L, "io", luaopen_io, 0);
+            lua_getfield(L, 2, "open");
+            lua_replace(L, 2);;
+            lua_pushstring(L, channel->path);
+            lua_pushstring(L, "r");
+            lua_call(L, 2, 3);
+            return lua_isnil(L, 2) ? 3 : 1; 
         default:
             lua_pushnil(L);
             break;
@@ -244,7 +253,7 @@ static int process_get_stderr(lua_State *L)
     {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND: ;
-            ELI_STREAM * stream = lua_newuserdata(L, sizeof(ELI_STREAM));
+            ELI_STREAM * stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
             stream->closed = channel->stream->closed;
             stream->fd = channel->stream->fd;
             stream->notDisposable = 1;
@@ -252,6 +261,14 @@ static int process_get_stderr(lua_State *L)
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
             break;
+        case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
+            luaL_requiref(L, "io", luaopen_io, 0);
+            lua_getfield(L, 2, "open");
+            lua_replace(L, 2);;
+            lua_pushstring(L, channel->path);
+            lua_pushstring(L, "r");
+            lua_call(L, 2, 3);
+            return lua_isnil(L, 2) ? 3 : 1; 
         default:
             lua_pushnil(L);
             break;
@@ -269,6 +286,7 @@ static const char * get_channel_kind_alias(stdioChannel * channel)
             return "pipe";
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:
             return "external";
+        case STDIO_CHANNEL_EXTERNAL_PATH_KIND:
         case STDIO_CHANNEL_EXTERNAL_FILE_KIND:
             return "file";
         case STDIO_CHANNEL_IGNORE_KIND:

@@ -13,17 +13,43 @@
 #include <windows.h>
 
 #define _lsleep Sleep
+#define open _open
+#define RDONLY_FLAG _O_RDONLY
+#define WRONLY_FLAG _O_WRONLY | _O_TRUNC
 #define SLEEP_MULTIPLIER 1e3
 #else
 #include <unistd.h>
+#include <fcntl.h>
 
 #define _lsleep usleep
+#define RDONLY_FLAG O_RDONLY
+#define WRONLY_FLAG O_WRONLY | O_TRUNC | O_CREAT
 #define SLEEP_MULTIPLIER 1e6
 #endif
+
+static int lcheck_option_with_fallback (lua_State *L, int arg, const char *def, const char *fallback,
+                                 const char *const lst[]) {
+  const char *name = (def) ? luaL_optstring(L, arg, def) :
+                             luaL_checkstring(L, arg);
+  int i;
+  int j = -1;
+  for (i=0; lst[i]; i++)
+  {
+    if (strcmp(lst[i], name) == 0)
+      return i;
+    if (fallback && strcmp(lst[i], fallback) == 0) 
+        j = i;
+  }
+  if (j > -1) return j;
+  
+  return luaL_argerror(L, arg,
+                       lua_pushfstring(L, "invalid option '%s'", name));
+}
 
 static int get_redirect(lua_State *L, const char *stdname, int idx, struct spawn_params *p) {
     stdioChannel* channel = malloc(sizeof(stdioChannel));
     channel->fdToClose = -1;
+    channel->path = NULL;
     lua_getfield(L, idx, stdname);
 
     int stdioKind;
@@ -46,9 +72,13 @@ static int get_redirect(lua_State *L, const char *stdname, int idx, struct spawn
     {
         case LUA_TNIL: // fall through
         case LUA_TSTRING: ;
-            static const char * lst[] = { "ignore", "inherit", "pipe", NULL };
-            enum {IGNORE, INHERIT, PIPE};
-            int kind = luaL_checkoption(L, -1, "pipe", lst); // fallback to default pipe mode
+            /** TODO 
+             * consider passing path
+             * reuse code from luaL_checkoption to return one of options or fall back to PATH mode
+            */
+            static const char * lst[] = { "ignore", "inherit", "pipe", "path", NULL };
+            enum {IGNORE, INHERIT, PIPE, PATH};
+            int kind = lcheck_option_with_fallback(L, -1, "pipe", "path", lst); // fallback to default pipe mode
             switch(kind) {
                 case IGNORE:
                    channel->kind = STDIO_CHANNEL_IGNORE_KIND;
@@ -61,6 +91,29 @@ static int get_redirect(lua_State *L, const char *stdname, int idx, struct spawn
                        spawn_param_redirect(p, stdioKind, stdioKind);
                    #endif
                    break;
+                case PATH: 
+                    channel->kind = STDIO_CHANNEL_EXTERNAL_PATH_KIND;
+                    const char * path = luaL_checkstring(L, -1);
+                    channel->path = path;
+                    int fd;
+                    if (stdioKind == STDIO_STDIN) 
+                    {
+                        if ((fd = open(path, RDONLY_FLAG)) ==-1)
+                        {
+                            return push_error(L, "Failed to open stdin file!");
+                        }
+                    } else {        
+                        if ((fd = open(path, WRONLY_FLAG)) ==-1)
+                        {
+                            return push_error(L, "Failed to create stdout/stderr file!");
+                        }
+                    }
+                    #ifdef _WIN32
+                        spawn_param_redirect(p, stdioKind, _get_osfhandle(fd));
+                    #else
+                        spawn_param_redirect(p, stdioKind, fd);
+                    #endif
+                    break;
                 case PIPE:
                    channel->kind = STDIO_CHANNEL_STREAM_KIND;
                    PIPE_DESCRIPTORS descriptors;

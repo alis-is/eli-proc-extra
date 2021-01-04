@@ -12,6 +12,7 @@ typedef enum stdioChannelKind {
     STDIO_CHANNEL_STREAM_KIND,
     STDIO_CHANNEL_EXTERNAL_STREAM_KIND,
     STDIO_CHANNEL_EXTERNAL_FILE_KIND,
+    STDIO_CHANNEL_EXTERNAL_PATH_KIND,
     STDIO_CHANNEL_IGNORE_KIND
 } stdioChannelKind;
 
@@ -20,5 +21,6 @@ typedef struct stdioChannel {
     ELI_STREAM *stream;
     int fdToClose;
     luaL_Stream *file;
+    const char * path;
 } stdioChannel;
 #endif
