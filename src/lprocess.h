@@ -7,16 +7,15 @@
 #include <unistd.h>
 #endif
 
-typedef struct process
-{
-    int status;
+typedef struct process {
+  int status;
 #ifdef _WIN32
-    HANDLE hProcess;
-    DWORD dwProcessId;
+  HANDLE hProcess;
+  DWORD dwProcessId;
 #else
-    pid_t pid;
+  pid_t pid;
 #endif
-    stdioChannel* stdio[3];
+  stdioChannel *stdio[3];
 } process;
 
 #define PROCESS_METATABLE "ELI_PROCESS"
