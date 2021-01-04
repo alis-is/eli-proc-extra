@@ -324,10 +324,10 @@ static int eli_spawn(lua_State *L)
             spawn_param_env(params); /* cmd opts ... */
             break;
         }
-        int err_count = get_redirects(L, 2, params);  /* cmd opts ... */
-        if (err_count > 0) {
-            return err_count;
-        }
+    }
+    int err_count = get_redirects(L, 2, params);  /* cmd opts ... */
+    if (err_count > 0) {
+        return err_count;
     }
     return spawn_param_execute(params); /* proc/nil error */
 }
