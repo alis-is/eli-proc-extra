@@ -1,3 +1,6 @@
+#ifndef ELI_STREAM_EXTRA_H_
+#define ELI_STREAM_EXTRA_H_
+
 #include "lua.h"
 
 #ifdef _WIN32
@@ -32,3 +35,4 @@ int stream_set_nonblocking(int fd, int nonblocking);
 int stream_as_filestream(lua_State *L, int fd, const char *mode);
 int stream_close(int fd);
 ELI_STREAM *new_stream();
+#endif

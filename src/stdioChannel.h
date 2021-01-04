@@ -1,6 +1,7 @@
 #ifndef STDIO_CHANNEL_H_
 #define STDIO_CHANNEL_H_
 
+#include "lauxlib.h"
 #include "stream.h"
 
 #define STDIO_STDIN 0

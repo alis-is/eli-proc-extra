@@ -5,7 +5,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "lutil.h"
-
+#include "stream.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,7 +15,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
-//#include "stream.h" passed from spawn.h
 
 /* proc -- pid */
 static int process_pid(lua_State *L) {
