@@ -14,6 +14,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <fcntl.h>
 
 #define _lsleep Sleep
 #define open _open
@@ -30,6 +31,13 @@
 #define WRONLY_FLAG O_WRONLY | O_TRUNC | O_CREAT
 #define SLEEP_MULTIPLIER 1e6
 #endif
+
+/* REDIRECT KINDS */
+#define IGNORE 0
+#define INHERIT 1
+#define PIPE 2
+#define PATH 3
+/* END REDIRECT KINDS */
 
 static int lcheck_option_with_fallback(lua_State *L, int arg, const char *def,
                                        const char *fallback,
@@ -81,7 +89,6 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
      * PATH mode
      */
     static const char *lst[] = {"ignore", "inherit", "pipe", "path", NULL};
-    enum { IGNORE, INHERIT, PIPE, PATH };
     int kind = lcheck_option_with_fallback(
         L, -1, "pipe", "path", lst); // fallback to default pipe mode
     switch (kind) {
@@ -111,7 +118,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
         }
       }
 #ifdef _WIN32
-      spawn_param_redirect(p, stdioKind, _get_osfhandle(fd));
+      spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(fd));
 #else
       spawn_param_redirect(p, stdioKind, fd);
 #endif
@@ -129,7 +136,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
 #ifdef _WIN32
       spawn_param_redirect(
           p, stdioKind,
-          _get_osfhandle(descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
+          (HANDLE)_get_osfhandle(descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
 #else
       spawn_param_redirect(p, stdioKind,
                            descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]);
@@ -166,7 +173,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
       channel->kind = STDIO_CHANNEL_EXTERNAL_FILE_KIND;
       channel->file = fh;
 #ifdef _WIN32
-      spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(_fileno(fh)));
+      spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(_fileno(fh->f)));
 #else
       spawn_param_redirect(p, stdioKind, fileno(fh->f));
 #endif
@@ -210,7 +217,6 @@ static int get_redirects(lua_State *L, int idx, struct spawn_params *p) {
     // fall through
   case LUA_TSTRING:;
     static const char *lst[] = {"ignore", "inherit", "pipe", NULL};
-    enum { IGNORE, INHERIT, PIPE };
     luaL_checkoption(L, -1, "pipe", lst); // force only limited set of strings
     const char *stdio = luaL_optstring(L, -1, "pipe");
     lua_pop(L, 1);

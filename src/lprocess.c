@@ -84,7 +84,6 @@ static int process_wait(lua_State *L) {
 /* proc -- exitcode/nil error */
 static int process_kill(lua_State *L) {
   struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-  int signal = luaL_optnumber(L, 2, SIGTERM);
 
   if (p->status == -1) {
 #ifdef _WIN32
@@ -92,6 +91,7 @@ static int process_kill(lua_State *L) {
       return windows_pushlasterror(L);
     p->status = 0;
 #else
+    int signal = luaL_optnumber(L, 2, SIGTERM);
     int const status = kill(p->pid, signal);
     if (status == -1)
       return push_error(L, NULL);
@@ -111,6 +111,9 @@ static int process_tostring(lua_State *L) {
   if (!GetExitCodeProcess(p->hProcess, &exitcode))
     return windows_pushlasterror(L);
   p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
+  lua_pushlstring(L, buf,
+                sprintf(buf, "process (%lu, %s)", (unsigned long)p->dwProcessId,
+                        p->status == -1 ? "running" : "terminated"));
 #else
   int status = 0;
   int res = waitpid(p->pid, &status, WNOHANG);
@@ -118,10 +121,11 @@ static int process_tostring(lua_State *L) {
     p->status = WEXITSTATUS(status);
   else if (res == -1)
     p->status = 0;
-#endif
   lua_pushlstring(L, buf,
-                  sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid,
-                          p->status == -1 ? "running" : "terminated"));
+                sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid,
+                        p->status == -1 ? "running" : "terminated"));
+#endif
+
   return 1;
 }
 

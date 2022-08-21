@@ -108,7 +108,7 @@ static const char **get_argv(lua_State *L) {
 }
 
 #ifdef _WIN32
-static char *to_win_argv(lua_State *L, const char **argv) {
+static const char *to_win_argv(lua_State *L, const char **argv) {
   luaL_Buffer b;
   // lua_pop(L, 1); // pop argv
   luaL_buffinit(L, &b);
@@ -122,7 +122,7 @@ static char *to_win_argv(lua_State *L, const char **argv) {
     }
   }
   luaL_pushresult(&b);
-  char *cmdline = luaL_tolstring(L, -1, b.size);
+  const char *cmdline = luaL_tolstring(L, -1, NULL);
   lua_replace(L, 1);
   return cmdline;
 }
@@ -185,7 +185,7 @@ static const char **get_env(lua_State *L) {
 }
 
 #ifdef _WIN32
-static char *to_win_env(lua_State *L, const char **env) {
+static const char *to_win_env(lua_State *L, const char **env) {
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   for (; *env; env++) {
@@ -195,7 +195,7 @@ static char *to_win_env(lua_State *L, const char **env) {
   luaL_addchar(&b, '\0'); // final '\0'
   luaL_pushresult(&b);
 
-  char *winEnv = luaL_tolstring(L, -1, b.size);
+  const char *winEnv = luaL_tolstring(L, -1, NULL);
   lua_pop(L, 1); // cleanup
   return winEnv;
 }
@@ -231,7 +231,6 @@ void spawn_param_redirect(spawn_params *p, int d, HANDLE h) {
     p->si.hStdError = h;
     break;
   }
-  spawn_param_redirect_raw(p, stdname, h);
 }
 #else
 void spawn_param_redirect(spawn_params *p, int d, int fd) {
@@ -306,7 +305,7 @@ int spawn_param_execute(spawn_params *p) {
     close_stdio_channel(p->stdio[STDIO_STDOUT]);
     close_stdio_channel(p->stdio[STDIO_STDERR]);
 #ifdef _WIN32
-    return windows_pusherror(L, GetLastError(), -2);
+    return windows_pushlasterror(L);
 #else
     return push_error(L, NULL);
 #endif
