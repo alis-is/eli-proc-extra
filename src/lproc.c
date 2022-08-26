@@ -19,12 +19,11 @@
 #define _lsleep Sleep
 #define open _open
 #define RDONLY_FLAG _O_RDONLY
-#define WRONLY_FLAG _O_WRONLY | _O_TRUNC
+#define WRONLY_FLAG _O_WRONLY | _O_TRUNC | _O_BINARY | _O_CREAT
 #define SLEEP_MULTIPLIER 1e3
 #else
 #include <fcntl.h>
 #include <unistd.h>
-
 
 #define _lsleep usleep
 #define RDONLY_FLAG O_RDONLY
