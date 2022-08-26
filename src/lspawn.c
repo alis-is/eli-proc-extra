@@ -66,7 +66,11 @@ spawn_params *spawn_param_init(lua_State *L) {
 }
 
 void spawn_param_filename(spawn_params *p, const char *filename) {
+#ifdef _WIN32
   p->cmdline = filename;
+#else
+  p->command = filename;
+#endif
 }
 
 /* Converts a Lua array of strings to a null-terminated array of char pointers.
