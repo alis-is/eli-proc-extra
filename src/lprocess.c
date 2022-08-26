@@ -215,7 +215,6 @@ static int process_get_stdout(lua_State *L) {
     luaL_requiref(L, "io", luaopen_io, 0);
     lua_getfield(L, 1, "open");
     lua_replace(L, 1);
-    ;
     lua_pushstring(L, channel->path);
     lua_pushstring(L, "r");
     lua_call(L, 2, LUA_MULTRET);

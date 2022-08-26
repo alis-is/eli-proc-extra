@@ -12,27 +12,34 @@
 
 #ifdef _WIN32
 /* quotes and adds argument string to b */
-static int add_argument(luaL_Buffer *b, const char *s) {
-  int oddbs = 0;
+static void add_argument(luaL_Buffer *b, const char *s) {
+  const char *tmps = s;
+  int hasSpace = 0;
+  for (;*tmps; tmps++) {
+    if (isspace(*tmps)) {
+      hasSpace = 1;
+      break;
+    }
+  }
+  if (!hasSpace) {
+    luaL_addstring(b, s);
+    return;
+  }
   luaL_addchar(b, '"');
   for (; *s; s++) {
     switch (*s) {
     case '\\':
       luaL_addchar(b, '\\');
-      oddbs = !oddbs;
       break;
     case '"':
       luaL_addchar(b, '\\');
-      oddbs = 0;
       break;
     default:
-      oddbs = 0;
       break;
     }
     luaL_addchar(b, *s);
   }
   luaL_addchar(b, '"');
-  return oddbs;
 }
 
 #define close _close
@@ -59,20 +66,7 @@ spawn_params *spawn_param_init(lua_State *L) {
 }
 
 void spawn_param_filename(spawn_params *p, const char *filename) {
-#ifdef _WIN32
-  lua_State *L = p->L;
-  luaL_Buffer b;
-  luaL_buffinit(L, &b);
-  if (add_argument(&b, lua_tostring(L, 1))) {
-    luaL_error(L, "argument ends in odd number of backslashes");
-    return;
-  }
-  luaL_pushresult(&b);
-  lua_replace(L, 1);
-  p->cmdline = lua_tostring(L, 1);
-#else
-  p->command = filename;
-#endif
+  p->cmdline = filename;
 }
 
 /* Converts a Lua array of strings to a null-terminated array of char pointers.
