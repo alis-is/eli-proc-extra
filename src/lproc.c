@@ -58,7 +58,7 @@ static int lcheck_option_with_fallback(lua_State *L, int arg, const char *def,
 }
 
 static int get_redirect(lua_State *L, const char *stdname, int idx,
-                        struct spawn_params *p) {
+                        spawn_params *p) {
   stdioChannel *channel = malloc(sizeof(stdioChannel));
   channel->fdToClose = -1;
   channel->path = NULL;
@@ -179,6 +179,11 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
     } else if (lua_rawequal(L, -1, -4) || lua_rawequal(L, -2, -4)) { // eli pipe
       lua_pop(L, lua_gettop(L) - top);
       ELI_STREAM *stream = (ELI_STREAM *)lua_touserdata(L, -1);
+      if (stream == NULL) {
+        luaL_error(L, "%s: invalid stream");
+        return 1;
+      }
+      
       if (stream->closed) {
         luaL_error(L, "%s: closed pipe");
         return 1;
@@ -203,7 +208,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
   return 0;
 }
 
-static int get_redirects(lua_State *L, int idx, struct spawn_params *p) {
+static int get_redirects(lua_State *L, int idx, spawn_params *p) {
   lua_getfield(L, idx, "stdio");
 
   // pipe, inherit, ignore are supported values
@@ -248,7 +253,7 @@ static int get_redirects(lua_State *L, int idx, struct spawn_params *p) {
 /* filename [args-opts] -- proc/nil error */
 /* args-opts -- proc/nil error */
 static int eli_spawn(lua_State *L) {
-  struct spawn_params *params;
+  spawn_params *params;
   int have_options;
   switch (lua_type(L, 1)) {
   default:

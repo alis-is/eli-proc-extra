@@ -1,3 +1,5 @@
+#ifndef ELI_PROCESS_H_
+#define ELI_PROCESS_H_
 #include "lua.h"
 #include "stdioChannel.h"
 
@@ -21,3 +23,4 @@ typedef struct process {
 #define PROCESS_METATABLE "ELI_PROCESS"
 
 int process_create_meta(lua_State *L);
+#endif

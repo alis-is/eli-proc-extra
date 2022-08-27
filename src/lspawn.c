@@ -236,25 +236,30 @@ void spawn_param_redirect(spawn_params *p, int d, int fd) {
 }
 #endif
 
-static void close_toClose(stdioChannel *channel) {
+static void close_toClose(process *p, int stdKind) {
+  stdioChannel *channel = p->stdio[stdKind];
+  if (channel == NULL) return;
   if (channel->fdToClose >= 0) {
     close(channel->fdToClose);
     channel->fdToClose = -1;
   }
 }
 
-int close_stdio_channel(stdioChannel *channel) {
+void close_stdio_channel(process *p, int stdKind) {
+  stdioChannel *channel = p->stdio[stdKind];
+  if (channel == NULL) return;
   if (channel->kind == STDIO_CHANNEL_STREAM_KIND) {
     close(channel->stream->fd);
     free(channel->stream);
   }
+  p->stdio[stdKind] = NULL;
   free(channel);
 }
 
 int spawn_param_execute(spawn_params *p) {
   lua_State *L = p->L;
   int success = 0;
-  struct process *proc;
+  process *proc;
 #ifdef _WIN32
   char *c, *e;
   PROCESS_INFORMATION pi;
@@ -294,14 +299,14 @@ int spawn_param_execute(spawn_params *p) {
     posix_spawnattr_destroy(&p->attr);
   }
 #endif
-  close_toClose(p->stdio[STDIO_STDIN]);
-  close_toClose(p->stdio[STDIO_STDOUT]);
-  close_toClose(p->stdio[STDIO_STDERR]);
-
+  close_toClose(proc, STDIO_STDIN);
+  close_toClose(proc, STDIO_STDOUT);
+  close_toClose(proc, STDIO_STDERR);
+  
   if (success != 1) {
-    close_stdio_channel(p->stdio[STDIO_STDIN]);
-    close_stdio_channel(p->stdio[STDIO_STDOUT]);
-    close_stdio_channel(p->stdio[STDIO_STDERR]);
+    close_stdio_channel(proc, STDIO_STDIN);
+    close_stdio_channel(proc, STDIO_STDOUT);
+    close_stdio_channel(proc, STDIO_STDERR);
 #ifdef _WIN32
     return windows_pushlasterror(L);
 #else

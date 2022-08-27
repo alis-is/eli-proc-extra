@@ -18,7 +18,7 @@
 
 /* proc -- pid */
 static int process_pid(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   if (p->status == -1) {
 #ifdef _WIN32
     lua_pushnumber(L, p->dwProcessId);
@@ -33,7 +33,7 @@ static int process_pid(lua_State *L) {
 
 /* proc -- exitcode/nil error */
 static int process_wait(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   lua_Number interval = luaL_optnumber(L, 2, 0);
   lua_Number units = luaL_optnumber(L, 3, 1);
   if (p->status == -1) {
@@ -83,7 +83,7 @@ static int process_wait(lua_State *L) {
 
 /* proc -- exitcode/nil error */
 static int process_kill(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
 
   if (p->status == -1) {
 #ifdef _WIN32
@@ -104,7 +104,7 @@ static int process_kill(lua_State *L) {
 
 /* proc -- string */
 static int process_tostring(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   char buf[40];
 #ifdef _WIN32
   DWORD exitcode;
@@ -130,7 +130,7 @@ static int process_tostring(lua_State *L) {
 }
 
 static int process_exitcode(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   if (p->status == -1) {
 #ifdef _WIN32
     DWORD exitcode;
@@ -151,7 +151,7 @@ static int process_exitcode(lua_State *L) {
 }
 
 static int process_exited(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   int active = 0;
   if (p->status == -1) {
 #ifdef _WIN32
@@ -176,8 +176,12 @@ static int process_exited(lua_State *L) {
 }
 
 static int process_get_stdin(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   stdioChannel *channel = p->stdio[STDIO_STDIN];
+  if (channel == NULL) {
+    lua_pushnil(L);
+    return 1;
+  }
   switch (channel->kind) {
   case STDIO_CHANNEL_STREAM_KIND:
   case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
@@ -197,8 +201,12 @@ static int process_get_stdin(lua_State *L) {
 }
 
 static int process_get_stdout(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   stdioChannel *channel = p->stdio[STDIO_STDOUT];
+  if (channel == NULL) {
+    lua_pushnil(L);
+    return 1;
+  }
   switch (channel->kind) {
   case STDIO_CHANNEL_STREAM_KIND:
   case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
@@ -227,8 +235,12 @@ static int process_get_stdout(lua_State *L) {
 }
 
 static int process_get_stderr(lua_State *L) {
-  struct process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
   stdioChannel *channel = p->stdio[STDIO_STDERR];
+  if (channel == NULL) {
+    lua_pushnil(L);
+    return 1;
+  }
   switch (channel->kind) {
   case STDIO_CHANNEL_STREAM_KIND:
   case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
@@ -245,7 +257,6 @@ static int process_get_stderr(lua_State *L) {
     luaL_requiref(L, "io", luaopen_io, 0);
     lua_getfield(L, 1, "open");
     lua_replace(L, 1);
-    ;
     lua_pushstring(L, channel->path);
     lua_pushstring(L, "r");
     lua_call(L, 2, LUA_MULTRET);
@@ -258,6 +269,9 @@ static int process_get_stderr(lua_State *L) {
 }
 
 static const char *get_channel_kind_alias(stdioChannel *channel) {
+  if (channel == NULL) {
+    return "closed";
+  }
   switch (channel->kind) {
   case STDIO_CHANNEL_INHERIT_KIND:
     return "inherit";
@@ -275,6 +289,7 @@ static const char *get_channel_kind_alias(stdioChannel *channel) {
 
 static int process_stdio_info(lua_State *L) {
   process *p = (process *)lua_touserdata(L, 1);
+  if (p == NULL) return 0;
   lua_newtable(L);
   lua_pushstring(L, get_channel_kind_alias(p->stdio[STDIO_STDIN]));
   lua_setfield(L, -2, "stdin");
@@ -287,10 +302,10 @@ static int process_stdio_info(lua_State *L) {
 
 static int process_close(lua_State *L) {
   process *p = (process *)lua_touserdata(L, 1);
-
-  close_stdio_channel(p->stdio[STDIO_STDIN]);
-  close_stdio_channel(p->stdio[STDIO_STDOUT]);
-  close_stdio_channel(p->stdio[STDIO_STDERR]);
+  if (p == NULL) return 0;
+  close_stdio_channel(p, STDIO_STDIN);
+  close_stdio_channel(p, STDIO_STDOUT);
+  close_stdio_channel(p, STDIO_STDERR);
   return 0;
 }
 
@@ -332,5 +347,7 @@ int process_create_meta(lua_State *L) {
 
   lua_pushcfunction(L, process_close);
   lua_setfield(L, -2, "__gc");
+  lua_pushcfunction(L, process_close);
+  lua_setfield(L, -2, "__close");
   return 1;
 }

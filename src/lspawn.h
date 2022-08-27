@@ -1,5 +1,9 @@
+#ifndef ELI_SPAWN_H_
+#define ELI_SPAWN_H_
+
 #include "lua.h"
 #include "stdioChannel.h"
+#include "lprocess.h"
 #include <stdio.h>
 
 
@@ -13,7 +17,6 @@
 
 #endif
 
-struct process;
 typedef struct spawn_params {
   lua_State *L;
 #ifdef _WIN32
@@ -30,15 +33,16 @@ typedef struct spawn_params {
 
 int proc_create_meta(lua_State *L);
 
-struct spawn_params *spawn_param_init(lua_State *L);
-void spawn_param_filename(struct spawn_params *p, const char *filename);
-void spawn_param_args(struct spawn_params *p);
-void spawn_param_env(struct spawn_params *p);
+spawn_params *spawn_param_init(lua_State *L);
+void spawn_param_filename(spawn_params *p, const char *filename);
+void spawn_param_args(spawn_params *p);
+void spawn_param_env(spawn_params *p);
 #ifdef _WIN32
-void spawn_param_redirect(struct spawn_params *p, int d, HANDLE h);
+void spawn_param_redirect(spawn_params *p, int d, HANDLE h);
 #else
 void spawn_param_redirect(spawn_params *p, int d, int fd);
 #endif
-int spawn_param_execute(struct spawn_params *p);
+int spawn_param_execute(spawn_params *p);
 
-int close_stdio_channel(stdioChannel *channel);
+void close_stdio_channel(process * p, int stdKind);
+#endif
