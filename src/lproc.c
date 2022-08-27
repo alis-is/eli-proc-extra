@@ -20,6 +20,7 @@
 #define open _open
 #define RDONLY_FLAG _O_RDONLY
 #define WRONLY_FLAG _O_WRONLY | _O_TRUNC | _O_BINARY | _O_CREAT
+#define CREATION_FLAG _S_IREAD | _S_IWRITE
 #define SLEEP_MULTIPLIER 1e3
 #else
 #include <fcntl.h>
@@ -28,6 +29,7 @@
 #define _lsleep usleep
 #define RDONLY_FLAG O_RDONLY
 #define WRONLY_FLAG O_WRONLY | O_TRUNC | O_CREAT
+#define CREATION_FLAG S_IRUSR | S_IWUSR  | S_IRGRP |  S_IROTH
 #define SLEEP_MULTIPLIER 1e6
 #endif
 
@@ -82,11 +84,6 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
   switch (lua_type(L, -1)) {
   case LUA_TNIL: // fall through
   case LUA_TSTRING:;
-    /** TODO
-     * consider passing path
-     * reuse code from luaL_checkoption to return one of options or fall back to
-     * PATH mode
-     */
     static const char *lst[] = {"ignore", "inherit", "pipe", "path", NULL};
     int kind = lcheck_option_with_fallback(
         L, -1, "pipe", "path", lst); // fallback to default pipe mode
@@ -97,7 +94,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
     case INHERIT:
       channel->kind = STDIO_CHANNEL_INHERIT_KIND;
 #ifdef _WIN32
-      spawn_param_redirect(p, stdioKind, GetStdHandle(-10 + (-1 * stdioKind)));
+      spawn_param_redirect(p, stdioKind, GetStdHandle(-10 + (-1 * stdioKind) /* remap stdio kind to win STD_*/));
 #else
       spawn_param_redirect(p, stdioKind, stdioKind);
 #endif
@@ -112,7 +109,7 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
           return push_error(L, "Failed to open stdin file!");
         }
       } else {
-        if ((fd = open(path, WRONLY_FLAG)) == -1) {
+        if ((fd = open(path, WRONLY_FLAG, CREATION_FLAG)) == -1) {
           return push_error(L, "Failed to create stdout/stderr file!");
         }
       }
@@ -128,7 +125,6 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
       if (new_pipe(&descriptors) == -1) {
         return push_error(L, "Failed to create pipe!");
       };
-
       ELI_STREAM *stream = new_stream();
       stream->fd = descriptors.fd[stdioKind == STDIO_STDIN ? 1 : 0];
       channel->stream = stream;
@@ -164,6 +160,10 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
     if (lua_rawequal(L, -3, -4)) { // file
       lua_pop(L, lua_gettop(L) - top);
       luaL_Stream *fh = (luaL_Stream *)luaL_checkudata(L, -1, "FILE*");
+      if (fh == NULL) {
+        luaL_error(L, "%s: invalid file");
+        return 1;
+      }
       if (fh->closef == 0 || fh->f == NULL) {
         luaL_error(L, "%s: closed file");
         return 1;
@@ -183,7 +183,6 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
         luaL_error(L, "%s: invalid stream");
         return 1;
       }
-      
       if (stream->closed) {
         luaL_error(L, "%s: closed pipe");
         return 1;
@@ -250,7 +249,7 @@ static int get_redirects(lua_State *L, int idx, spawn_params *p) {
   return 0;
 }
 
-/* filename [args-opts] -- proc/nil error */
+/* filename [args, opts] -- proc/nil error */
 /* args-opts -- proc/nil error */
 static int eli_spawn(lua_State *L) {
   spawn_params *params;

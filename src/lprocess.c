@@ -49,7 +49,7 @@ static int process_wait(lua_State *L) {
 #else
     int status = 0;
     int res = waitpid(p->pid, &status, WNOHANG);
-    if (p->pid = res) {
+    if (p->pid == res) {
       p->status = WEXITSTATUS(status);
     } else if (interval > 0) {
       int elapsed = 0;
