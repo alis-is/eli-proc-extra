@@ -14,6 +14,7 @@
 #else
 #include <sys/wait.h>
 #include <unistd.h>
+3include <signal.h>
 #endif
 
 /* proc -- pid */
