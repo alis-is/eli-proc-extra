@@ -289,7 +289,7 @@ static const char *get_channel_kind_alias(stdioChannel *channel) {
 }
 
 static int process_stdio_info(lua_State *L) {
-  process *p = (process *)lua_touserdata(L, 1);
+  process *p = (process *)luaL_checkudata(L, 1, PROCESS_METATABLE);
   if (p == NULL) return 0;
   lua_newtable(L);
   lua_pushstring(L, get_channel_kind_alias(p->stdio[STDIO_STDIN]));
@@ -302,7 +302,7 @@ static int process_stdio_info(lua_State *L) {
 }
 
 static int process_close(lua_State *L) {
-  process *p = (process *)lua_touserdata(L, 1);
+  process *p = (process *)luaL_checkudata(L, 1, PROCESS_METATABLE);
   if (p == NULL) return 0;
   close_stdio_channel(p, STDIO_STDIN);
   close_stdio_channel(p, STDIO_STDOUT);
