@@ -6,6 +6,7 @@
 #include "lualib.h"
 #include "lutil.h"
 #include "stream.h"
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,7 +15,6 @@
 #else
 #include <sys/wait.h>
 #include <unistd.h>
-#include <signal.h>
 #endif
 
 /* proc -- pid */
@@ -85,14 +85,34 @@ static int process_wait(lua_State *L) {
 /* proc -- exitcode/nil error */
 static int process_kill(lua_State *L) {
   process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
+  int signal = luaL_optnumber(L, 2, SIGTERM);
 
   if (p->status == -1) {
 #ifdef _WIN32
+    DWORD event = -1;
+
+    switch (signal) {
+    case SIGINT:
+      event = CTRL_C_EVENT;
+      break;
+    case SIGTERM:
+      event = CTRL_CLOSE_EVENT;
+      break;
+    }
+    if (event != -1) {
+      if (p->isSeparateProcessGroup) {
+        if (!GenerateConsoleCtrlEvent(event, p->dwProcessId))
+          return windows_pushlasterror(L);
+        lua_pushnumber(L, p->status);
+        return 1;
+      }
+      return push_error(L, "on windows it is possible to send SIGINT/SIGTERM "
+                           "only to process in separate process group");
+    }
     if (!TerminateProcess(p->hProcess, 0))
       return windows_pushlasterror(L);
     p->status = 0;
 #else
-    int signal = luaL_optnumber(L, 2, SIGTERM);
     int const status = kill(p->pid, signal);
     if (status == -1)
       return push_error(L, NULL);
@@ -106,15 +126,16 @@ static int process_kill(lua_State *L) {
 /* proc -- string */
 static int process_tostring(lua_State *L) {
   process *p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-  char buf[40];
+  char buf[50];
 #ifdef _WIN32
   DWORD exitcode;
   if (!GetExitCodeProcess(p->hProcess, &exitcode))
     return windows_pushlasterror(L);
   p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
   lua_pushlstring(L, buf,
-                sprintf(buf, "process (%lu, %s)", (unsigned long)p->dwProcessId,
-                        p->status == -1 ? "running" : "terminated"));
+                  sprintf(buf, "process (%lu, %s)",
+                          (unsigned long)p->dwProcessId,
+                          p->status == -1 ? "running" : "terminated"));
 #else
   int status = 0;
   int res = waitpid(p->pid, &status, WNOHANG);
@@ -123,8 +144,8 @@ static int process_tostring(lua_State *L) {
   else if (res == -1)
     p->status = 0;
   lua_pushlstring(L, buf,
-                sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid,
-                        p->status == -1 ? "running" : "terminated"));
+                  sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid,
+                          p->status == -1 ? "running" : "terminated"));
 #endif
 
   return 1;
@@ -289,8 +310,9 @@ static const char *get_channel_kind_alias(stdioChannel *channel) {
 }
 
 static int process_stdio_info(lua_State *L) {
-  process *p = (process *)lua_touserdata(L, 1);
-  if (p == NULL) return 0;
+  process *p = (process *)luaL_checkudata(L, 1, PROCESS_METATABLE);
+  if (p == NULL)
+    return 0;
   lua_newtable(L);
   lua_pushstring(L, get_channel_kind_alias(p->stdio[STDIO_STDIN]));
   lua_setfield(L, -2, "stdin");
@@ -301,9 +323,18 @@ static int process_stdio_info(lua_State *L) {
   return 1;
 }
 
+static int process_get_group(lua_State *L) {
+  process *p = (process *)luaL_checkudata(L, 1, PROCESS_METATABLE);
+  if (p == NULL)
+    return 0;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref);
+  return 1;
+}
+
 static int process_close(lua_State *L) {
-  process *p = (process *)lua_touserdata(L, 1);
-  if (p == NULL) return 0;
+  process *p = (process *)luaL_checkudata(L, 1, PROCESS_METATABLE);
+  if (p == NULL)
+    return 0;
   close_stdio_channel(p, STDIO_STDIN);
   close_stdio_channel(p, STDIO_STDOUT);
   close_stdio_channel(p, STDIO_STDERR);
@@ -340,6 +371,9 @@ int process_create_meta(lua_State *L) {
   lua_setfield(L, -2, "get_stderr");
   lua_pushcfunction(L, process_stdio_info);
   lua_setfield(L, -2, "get_stdio_info");
+  lua_pushcfunction(L, process_get_group);
+  lua_setfield(L, -2, "get_group");
+  
 
   lua_pushstring(L, PROCESS_METATABLE);
   lua_setfield(L, -2, "__type");

@@ -1,20 +1,18 @@
 #include "lauxlib.h"
 #include "lua.h"
 
-
 #include "lprocess.h"
 #include "lspawn.h"
 #include "lutil.h"
 #include "pipe.h"
-
+#include <signal.h>
 
 #include <stdlib.h>
 #include <string.h>
 
-
 #ifdef _WIN32
-#include <windows.h>
 #include <fcntl.h>
+#include <windows.h>
 
 #define _lsleep Sleep
 #define open _open
@@ -29,7 +27,7 @@
 #define _lsleep usleep
 #define RDONLY_FLAG O_RDONLY
 #define WRONLY_FLAG O_WRONLY | O_TRUNC | O_CREAT
-#define CREATION_FLAG S_IRUSR | S_IWUSR  | S_IRGRP |  S_IROTH
+#define CREATION_FLAG S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH
 #define SLEEP_MULTIPLIER 1e6
 #endif
 
@@ -94,7 +92,10 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
     case INHERIT:
       channel->kind = STDIO_CHANNEL_INHERIT_KIND;
 #ifdef _WIN32
-      spawn_param_redirect(p, stdioKind, GetStdHandle(-10 + (-1 * stdioKind) /* remap stdio kind to win STD_*/));
+      spawn_param_redirect(
+          p, stdioKind,
+          GetStdHandle(-10 +
+                       (-1 * stdioKind) /* remap stdio kind to win STD_*/));
 #else
       spawn_param_redirect(p, stdioKind, stdioKind);
 #endif
@@ -131,7 +132,8 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
 #ifdef _WIN32
       spawn_param_redirect(
           p, stdioKind,
-          (HANDLE)_get_osfhandle(descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
+          (HANDLE)_get_osfhandle(
+              descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
 #else
       spawn_param_redirect(p, stdioKind,
                            descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]);
@@ -172,7 +174,8 @@ static int get_redirect(lua_State *L, const char *stdname, int idx,
       channel->kind = STDIO_CHANNEL_EXTERNAL_FILE_KIND;
       channel->file = fh;
 #ifdef _WIN32
-      spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(_fileno(fh->f)));
+      spawn_param_redirect(p, stdioKind,
+                           (HANDLE)_get_osfhandle(_fileno(fh->f)));
 #else
       spawn_param_redirect(p, stdioKind, fileno(fh->f));
 #endif
@@ -297,6 +300,21 @@ static int eli_spawn(lua_State *L) {
   spawn_param_filename(params, lua_tostring(L, 1));
   /* get arguments, environment, and redirections */
   if (have_options) {
+    // newProcessGroup
+    lua_getfield(L, 2, "createProcessGroup"); /* cmd opts ... createProcessGroup */
+    if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
+      params->createProcessGroup = 1;
+    }
+    lua_pop(L, 1); /* cmd opts ... */
+    lua_getfield(L, 2, "processGroup"); /* cmd opts ... processGroup */
+    process_group *pg = luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+    if (pg != NULL) {
+      params->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX); /* cmd opts ... */
+    } else {
+      lua_pop(L, 1); /* cmd opts ... */
+    }
+    
+    // options
     lua_getfield(L, 2, "args"); /* cmd opts ... argtab */
     switch (lua_type(L, -1)) {
     default:
@@ -313,6 +331,8 @@ static int eli_spawn(lua_State *L) {
       spawn_param_args(params); /* cmd opts ... */
       break;
     }
+
+    // env
     lua_getfield(L, 2, "env"); /* cmd opts ... envtab */
     switch (lua_type(L, -1)) {
     default:
@@ -339,8 +359,20 @@ static const struct luaL_Reg eliProcExtra[] = {
 
 int luaopen_eli_proc_extra(lua_State *L) {
   process_create_meta(L);
+  process_group_create_meta(L);
 
   lua_newtable(L);
   luaL_setfuncs(L, eliProcExtra, 0);
+
+  // add table with signals - SIGTERM, SIGKILL and SIGINT
+  lua_newtable(L);
+  lua_pushinteger(L, SIGTERM);
+  lua_setfield(L, -2, "SIGTERM");
+  lua_pushinteger(L, 9 /*SIGKILL*/);
+  lua_setfield(L, -2, "SIGKILL");
+  lua_pushinteger(L, SIGINT);
+  lua_setfield(L, -2, "SIGINT");
+  lua_setfield(L, -2, "signals");
+
   return 1;
 }

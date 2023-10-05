@@ -4,6 +4,7 @@
 #include "lua.h"
 #include "stdioChannel.h"
 #include "lprocess.h"
+#include "lprocess_group.h"
 #include <stdio.h>
 
 
@@ -29,6 +30,8 @@ typedef struct spawn_params {
   posix_spawnattr_t attr;
 #endif
   stdioChannel *stdio[3];
+  int createProcessGroup;
+  int process_group_ref;
 } spawn_params;
 
 int proc_create_meta(lua_State *L);

@@ -1,21 +1,20 @@
 #include "lauxlib.h"
 #include "lprocess.h"
+#include "lprocess_group.h"
 #include "lua.h"
 #include "lutil.h"
-
 
 #include "lspawn.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-
 #ifdef _WIN32
 /* quotes and adds argument string to b */
 static void add_argument(luaL_Buffer *b, const char *s) {
   const char *tmps = s;
   int hasSpace = 0;
-  for (;*tmps; tmps++) {
+  for (; *tmps; tmps++) {
     if (isspace(*tmps)) {
       hasSpace = 1;
       break;
@@ -238,7 +237,8 @@ void spawn_param_redirect(spawn_params *p, int d, int fd) {
 
 static void close_toClose(process *p, int stdKind) {
   stdioChannel *channel = p->stdio[stdKind];
-  if (channel == NULL) return;
+  if (channel == NULL)
+    return;
   if (channel->fdToClose >= 0) {
     close(channel->fdToClose);
     channel->fdToClose = -1;
@@ -247,7 +247,8 @@ static void close_toClose(process *p, int stdKind) {
 
 void close_stdio_channel(process *p, int stdKind) {
   stdioChannel *channel = p->stdio[stdKind];
-  if (channel == NULL) return;
+  if (channel == NULL)
+    return;
   if (channel->kind == STDIO_CHANNEL_STREAM_KIND) {
     close(channel->stream->fd);
     free(channel->stream);
@@ -258,7 +259,7 @@ void close_stdio_channel(process *p, int stdKind) {
 
 int spawn_param_execute(spawn_params *p) {
   lua_State *L = p->L;
-  int success = 0;
+  int success = 1;
   process *proc;
 #ifdef _WIN32
   char *c, *e;
@@ -276,6 +277,7 @@ int spawn_param_execute(spawn_params *p) {
   luaL_getmetatable(L, PROCESS_METATABLE);
   lua_setmetatable(L, -2);
   proc->status = -1;
+  proc->process_group_ref = 0;
   proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
   proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
   proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
@@ -283,17 +285,74 @@ int spawn_param_execute(spawn_params *p) {
 #ifdef _WIN32
   c = strdup(p->cmdline);
   e = (char *)p->environment; /* strdup(p->environment); */
-  success = CreateProcess(0, c, 0, 0, TRUE, 0, e, 0, &p->si, &pi) != 0;
+  proc->isSeparateProcessGroup =
+      1; // if we decide to use different creation flags we may have to adjust
+  success = CreateProcess(0, c, 0, 0, TRUE, CREATE_NEW_CONSOLE, e, 0, &p->si,
+                          &pi) != 0;
   free(c);
 
   if (success == 1) {
     proc->hProcess = pi.hProcess;
     proc->dwProcessId = pi.dwProcessId;
+
+    if (p->createProcessGroup) {
+      HANDLE processGroup = CreateJobObject(NULL, NULL);
+      if (processGroup == NULL) {
+        success = 0;
+      } else {
+        // create process group
+        new_process_group(L, processGroup);
+        p->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+      }
+    }
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref); // process_group
+    process_group *pg =
+        (process_group *)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+    if (pg != NULL && success == 1) {
+      if (!AssignProcessToJobObject(pg->hJob, proc->hProcess)) {
+        success = 0;
+      } else {
+        proc->isGroupMember = !p->createProcessGroup;
+        proc->isGroupLeader = p->createProcessGroup;
+        proc->process_group_ref = p->process_group_ref;
+      }
+    }
+    lua_pop(L, 1); // cleanup
   }
+
 #else
   errno = 0;
-  success = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
-                         (char *const *)p->argv, (char *const *)p->envp) == 0;
+  if (p->createProcessGroup) {
+    if (posix_spawnattr_setpgroup(&p->attr, 0) != 0) {
+      success = 0;
+    } else {
+      proc->isGroupLeader = 1;
+    }
+  } else {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref); // process_group
+    process_group *pg =
+        (process_group *)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+    if (pg != NULL) {
+      if (posix_spawnattr_setpgroup(&p->attr, pg->gpid) != 0) {
+        success = 0;
+      } else {
+        proc->isGroupMember = 1;
+        proc->process_group_ref = p->process_group_ref;
+      }
+    }
+    lua_pop(L, 1); // cleanup
+  }
+
+  if (success == 1) {
+    success = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
+                           (char *const *)p->argv, (char *const *)p->envp) == 0;
+    if (p->createProcessGroup) {
+      new_process_group(L, proc->pid);
+      proc->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+  }
+
   if (success == 1) {
     posix_spawn_file_actions_destroy(&p->redirect);
     posix_spawnattr_destroy(&p->attr);
@@ -302,7 +361,7 @@ int spawn_param_execute(spawn_params *p) {
   close_toClose(proc, STDIO_STDIN);
   close_toClose(proc, STDIO_STDOUT);
   close_toClose(proc, STDIO_STDERR);
-  
+
   if (success != 1) {
     close_stdio_channel(proc, STDIO_STDIN);
     close_stdio_channel(proc, STDIO_STDOUT);
