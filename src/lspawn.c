@@ -301,8 +301,8 @@ int spawn_param_execute(spawn_params *p) {
         success = 0;
       } else {
         // create process group
-        new_process_group(L, processGroup);
-        p->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        new_process_group(L, processGroup);                    // proc group
+        p->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX); // clean stack
       }
     }
 
@@ -316,9 +316,17 @@ int spawn_param_execute(spawn_params *p) {
         proc->isGroupMember = !p->createProcessGroup;
         proc->isGroupLeader = p->createProcessGroup;
         proc->process_group_ref = p->process_group_ref;
+
+        // append process to process group
+        lua_rawgeti(L, LUA_REGISTRYINDEX,
+                    pg->process_table_ref); // process_group process_table
+        lua_pushvalue(L, -3); // process_group process_table process
+        lua_rawseti(L, -2,
+                    lua_rawlen(L, -2) + 1); // process_group process_table
+        lua_pop(L, 1);                      // process_group
       }
     }
-    lua_pop(L, 1); // cleanup
+    lua_pop(L, 1); // clean stack
   }
 
 #else
@@ -347,9 +355,25 @@ int spawn_param_execute(spawn_params *p) {
   if (success == 1) {
     success = posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr,
                            (char *const *)p->argv, (char *const *)p->envp) == 0;
-    if (p->createProcessGroup) {
-      new_process_group(L, proc->pid);
-      proc->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    if (success == 1) {
+      if (p->createProcessGroup) {
+        new_process_group(L, proc->pid);
+        proc->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+      }
+
+      lua_rawgeti(L, LUA_REGISTRYINDEX,
+                  proc->process_group_ref); // process_group
+      process_group *pg =
+          (process_group *)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+      if (pg != NULL) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX,
+                    pg->process_table_ref); // process_group process_table
+        lua_pushvalue(L, -3); // process_group process_table process
+        lua_rawseti(L, -2,
+                    lua_rawlen(L, -2) + 1); // process_group process_table
+        lua_pop(L, 1);                      // process_group
+      }
+      lua_pop(L, 1); // clean stack
     }
   }
 

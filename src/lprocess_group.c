@@ -22,13 +22,13 @@ void new_process_group(lua_State *L, HANDLE hJob) {
 #else
 void new_process_group(lua_State *L, pid_t gpid) {
 #endif
-  process_group *pg = lua_newuserdatauv(L, sizeof *pg, 0);
-  luaL_getmetatable(L, PROCESS_GROUP_METATABLE);
-  lua_setmetatable(L, -2);
+  process_group *pg = lua_newuserdatauv(L, sizeof *pg, 0); // process-group
+  luaL_getmetatable(L, PROCESS_GROUP_METATABLE);          // process-group metatable
+  lua_setmetatable(L, -2);                               // process-group
   pg->status = -1;
   // new table to store processes
-  lua_newtable(L);
-  pg->process_table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  lua_newtable(L);                                       // process-group process-table
+  pg->process_table_ref = luaL_ref(L, LUA_REGISTRYINDEX); // process-group
 
 #ifdef _WIN32
   pg->hJob = hJob;
@@ -71,12 +71,22 @@ static int process_group_kill(lua_State *L) {
       // iterate over all processes in the group
       lua_pushnil(L);
       while (lua_next(L, -2) != 0) {
-        process *proc = (process *)lua_touserdata(L, -1);
-        if (proc->isGroupMember) {
-          if (!GenerateConsoleCtrlEvent(event, proc->dwProcessId))
-            return windows_pushlasterror(L);
+        // call kill on each process
+        process *proc = (process *)lua_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
+        if (proc == NULL) {
+          lua_pop(L, 1);
+          continue;
         }
-        lua_pop(L, 1);
+        lua_getmetatable(L, -1);      // key proc metatable
+        lua_getfield(L, -1, "kill");  // key proc metatable kill
+        if (!lua_isfunction(L, -1)) {
+          lua_pop(L, 3);              // key
+          continue;
+        }
+        lua_pushvalue(L, -3);         // key proc metatable kill proc
+        lua_pushnumber(L, signal);    // key proc metatable kill proc signal
+        lua_call(L, 2, 0);            // call --> key proc metatable
+        lua_pop(L, 2);                // key
       }
       return 0;
     }
