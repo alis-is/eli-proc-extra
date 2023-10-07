@@ -10,21 +10,21 @@
 #endif
 
 typedef struct process {
-  int status;
-  int isGroupLeader; // on windows it is job leader
-  int isGroupMember; // on windows it is job member
-  int process_group_ref;
+    int status;
+    int isGroupLeader; // on windows it is job leader
+    int isGroupMember; // on windows it is job member
+    int process_group_ref;
 #ifdef _WIN32
-  int isSeparateProcessGroup;
-  HANDLE hProcess;
-  DWORD dwProcessId;
+    int isSeparateProcessGroup;
+    HANDLE hProcess;
+    DWORD dwProcessId;
 #else
-  pid_t pid;
+    pid_t pid;
 #endif
-  stdioChannel *stdio[3];
+    stdioChannel* stdio[3];
 } process;
 
 #define PROCESS_METATABLE "ELI_PROCESS"
 
-int process_create_meta(lua_State *L);
+int process_create_meta(lua_State* L);
 #endif
