@@ -30,7 +30,6 @@ typedef struct spawn_params {
 #endif
     stdioChannel* stdio[3];
     int createProcessGroup;
-    int process_group_ref;
 } spawn_params;
 
 int proc_create_meta(lua_State* L);
@@ -44,7 +43,7 @@ void spawn_param_redirect(spawn_params* p, int d, HANDLE h);
 #else
 void spawn_param_redirect(spawn_params* p, int d, int fd);
 #endif
-int spawn_param_execute(spawn_params* p);
+int spawn_param_execute(lua_State* L);
 
 void close_stdio_channel(process* p, int stdKind);
 #endif

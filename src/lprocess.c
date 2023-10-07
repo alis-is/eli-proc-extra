@@ -334,7 +334,8 @@ process_get_group(lua_State* L) {
     if (p == NULL) {
         return 0;
     }
-    lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref);
+    // get from user value
+    lua_getiuservalue(L, 1, 1);
     return 1;
 }
 

@@ -24,13 +24,13 @@ new_process_group(lua_State* L, HANDLE hJob) {
 void
 new_process_group(lua_State* L, pid_t gpid) {
 #endif
-    process_group* pg = lua_newuserdatauv(L, sizeof *pg, 0); // process-group
+    process_group* pg = lua_newuserdatauv(L, sizeof *pg, 1); // process-group
     luaL_getmetatable(L, PROCESS_GROUP_METATABLE);           // process-group metatable
     lua_setmetatable(L, -2);                                 // process-group
     pg->status = -1;
     // new table to store processes
-    lua_newtable(L);                                        // process-group process-table
-    pg->process_table_ref = luaL_ref(L, LUA_REGISTRYINDEX); // process-group
+    lua_newtable(L);             // process-group process-table
+    lua_setiuservalue(L, -2, 1); // Store the process-table in the first uv slot of process-group
 
 #ifdef _WIN32
     pg->hJob = hJob;
@@ -65,7 +65,8 @@ process_group_kill(lua_State* L) {
             case SIGTERM: event = CTRL_CLOSE_EVENT; break;
         }
         if (event != -1) {
-            lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_table_ref);
+            // get from user value
+            lua_getiuservalue(L, 1, 1); // process-group process-table
             // iterate over all processes in the group
             lua_pushnil(L);
             while (lua_next(L, -2) != 0) {
@@ -109,7 +110,7 @@ process_group_join(lua_State* L) {
     process_group* pg = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     process* p = luaL_checkudata(L, 2, PROCESS_METATABLE);
     if (pg != NULL && p != NULL) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, pg->process_table_ref);
+        lua_getiuservalue(L, 1, 1);
         // append process to the process table
         lua_pushvalue(L, -2);
     }
@@ -120,7 +121,7 @@ static int
 process_group_close(lua_State* L) {
     process_group* p = (process_group*)luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     if (p->status == -1) {
-        luaL_unref(L, LUA_REGISTRYINDEX, p->process_table_ref);
+        lua_getiuservalue(L, 1, 1);
 #ifdef _WIN32
         CloseHandle(p->hJob);
 #endif

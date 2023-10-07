@@ -237,6 +237,7 @@ get_redirects(lua_State* L, int idx, spawn_params* p) {
 static int
 eli_spawn(lua_State* L) {
     spawn_params* params;
+    process_group* pg = NULL;
     int have_options;
     switch (lua_type(L, 1)) {
         default: return luaL_typeerror(L, 1, "string or table");
@@ -280,14 +281,7 @@ eli_spawn(lua_State* L) {
         if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
             params->createProcessGroup = 1;
         }
-        lua_pop(L, 1);                      /* cmd opts ... */
-        lua_getfield(L, 2, "processGroup"); /* cmd opts ... processGroup */
-        process_group* pg = luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
-        if (pg != NULL) {
-            params->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX); /* cmd opts ... */
-        } else {
-            lua_pop(L, 1); /* cmd opts ... */
-        }
+        lua_pop(L, 1); /* cmd opts ... */
 
         // options
         lua_getfield(L, 2, "args"); /* cmd opts ... argtab */
@@ -319,7 +313,10 @@ eli_spawn(lua_State* L) {
     if (err_count > 0) {
         return err_count;
     }
-    return spawn_param_execute(params); /* proc/nil error */
+    // keep just params and process group at the stack
+    lua_getfield(L, 2, "processGroup"); /* -> cmd opts params processGroup/nil */
+    lua_settop(L, 2);                   /* -> params processGroup/nil */
+    return spawn_param_execute(L);      /* proc/nil error */
 }
 
 static const struct luaL_Reg eliProcExtra[] = {

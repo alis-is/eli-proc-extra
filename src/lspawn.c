@@ -258,8 +258,9 @@ close_stdio_channel(process* p, int stdKind) {
 }
 
 int
-spawn_param_execute(spawn_params* p) {
-    lua_State* L = p->L;
+spawn_param_execute(lua_State* L) {
+    spawn_params* p = (spawn_params*)lua_touserdata(L, 1);
+
     int success = 1;
     process* proc;
 #ifdef _WIN32
@@ -275,11 +276,10 @@ spawn_param_execute(spawn_params* p) {
         p->envp = (const char**)environ;
     }
 #endif
-    proc = lua_newuserdatauv(L, sizeof *proc, 0);
+    proc = lua_newuserdatauv(L, sizeof *proc, 1); // params process_group proc
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;
-    proc->process_group_ref = 0;
     proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
     proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
     proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
@@ -301,30 +301,37 @@ spawn_param_execute(spawn_params* p) {
                 success = 0;
             } else {
                 // create process group
-                new_process_group(L, processGroup);                    // proc group
-                p->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX); // clean stack
+                new_process_group(L, processGroup); // params process_group proc process_group
+                lua_replace(L, 2);                  // params process_group proc
             }
         }
 
-        lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref); // process_group
-        process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+        lua_rotate(L, -2, 1); // params proc process_group/nil
+
+        process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE); // params proc process_group
         if (pg != NULL && success == 1) {
             if (!AssignProcessToJobObject(pg->hJob, proc->hProcess)) {
                 success = 0;
             } else {
                 proc->isGroupMember = !p->createProcessGroup;
                 proc->isGroupLeader = p->createProcessGroup;
-                proc->process_group_ref = p->process_group_ref;
+                // params proc process_group
+                lua_getiuservalue(L, -1, 1); // params proc process_group process_table
+                // bring proc to the top of the stack
+                lua_rotate(L, -3, -2);       // params process_table proc process_group
+                lua_setiuservalue(L, -2, 1); // params process_table proc
+                lua_rotate(L, -2, 1);        // params proc process_table
 
                 // append process to process group
-                lua_rawgeti(L, LUA_REGISTRYINDEX,
-                            pg->process_table_ref);        // process_group process_table
-                lua_pushvalue(L, -3);                      // process_group process_table process
-                lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // process_group process_table
-                lua_pop(L, 1);                             // process_group
+                // params proc process_table
+                lua_pushvalue(L, -2);                      // params proc process_table process
+                lua_rawseti(L, -1, lua_rawlen(L, -1) + 1); // params proc process_table
+                lua_pop(L, 1);                             // params proc
             }
+        } else {
+            // keep just params proc
+            lua_pop(L, 1); // params proc
         }
-        lua_pop(L, 1); // clean stack
     }
 
 #else
@@ -336,40 +343,37 @@ spawn_param_execute(spawn_params* p) {
             proc->isGroupLeader = 1;
         }
     } else {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, p->process_group_ref); // process_group
-        process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+        // params process_group proc
+        process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
         if (pg != NULL) {
             if (posix_spawnattr_setpgroup(&p->attr, pg->gpid) != 0) {
                 success = 0;
             } else {
                 proc->isGroupMember = 1;
-                proc->process_group_ref = p->process_group_ref;
+                lua_pushvalue(L, 2);         // params process_group proc process_group
+                lua_setiuservalue(L, -2, 1); // params process_group proc
             }
         }
-        lua_pop(L, 1); // cleanup
     }
-
+    // params process_group proc
     if (success == 1) {
         success =
             posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr, (char* const*)p->argv, (char* const*)p->envp)
             == 0;
         if (success == 1) {
             if (p->createProcessGroup) {
-                new_process_group(L, proc->pid);
-                proc->process_group_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+                new_process_group(L, proc->pid); // params process_group proc process_group
+                lua_copy(L, -1, -3);             // params process_group proc process_group
+                lua_setiuservalue(L, -2, 1);     // params process_group proc
             }
 
-            lua_rawgeti(L, LUA_REGISTRYINDEX,
-                        proc->process_group_ref); // process_group
-            process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE);
+            process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
             if (pg != NULL) {
-                lua_rawgeti(L, LUA_REGISTRYINDEX,
-                            pg->process_table_ref);        // process_group process_table
-                lua_pushvalue(L, -3);                      // process_group process_table process
-                lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // process_group process_table
-                lua_pop(L, 1);                             // process_group
+                lua_getiuservalue(L, 2, 1);                // params process_group proc process_table
+                lua_pushvalue(L, -2);                      // params process_group process process_table process
+                lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // params process_group process process_table
+                lua_pop(L, 1);                             // params process_group process
             }
-            lua_pop(L, 1); // clean stack
         }
     }
 
