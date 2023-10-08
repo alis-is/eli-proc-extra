@@ -150,7 +150,7 @@ get_env(lua_State* L) {
         n++;
     } // envtab
 
-    const char** env = lua_newuserdatauv(L, (n + 1) * sizeof *env, 0); // envtab nil env
+    const char** env = lua_newuserdatauv(L, (n + 1) * sizeof *env, 0); // envtab env
     lua_pushnil(L);                                                    // envtab env nil
 
     for (i = 0; lua_next(L, -3); i++) { /* ... envtab env k v */
@@ -174,8 +174,7 @@ get_env(lua_State* L) {
         env[i] = t;
     } /* ... envtab env */
     env[n] = 0;
-    // ua_replace(L, -2); /* ... env */
-    lua_pop(L, 2);
+    lua_pop(L, 1); // ... envtab
     return env;
 }
 
@@ -271,6 +270,7 @@ spawn_param_execute(lua_State* L) {
         p->argv = lua_newuserdatauv(L, 2 * sizeof *p->argv, 0);
         p->argv[0] = p->command;
         p->argv[1] = 0;
+        lua_pop(L, 1); // pop argv
     }
     if (p->envp == 0) {
         p->envp = (const char**)environ;

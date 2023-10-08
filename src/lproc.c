@@ -270,7 +270,7 @@ eli_spawn(lua_State* L) {
             }
             break;
     }
-
+    int top = 0;
     params = spawn_param_init(L);
     /* get filename to execute */
     spawn_param_filename(params, lua_tostring(L, 1));
@@ -305,9 +305,11 @@ eli_spawn(lua_State* L) {
             default: return luaL_error(L, "bad env option (table expected, got %s)", luaL_typename(L, -1));
             case LUA_TNIL: break;
             case LUA_TTABLE:
-                spawn_param_env(params); /* cmd opts ... */
+                spawn_param_env(params);
+                /* cmd opts ... */
                 break;
         }
+        lua_pop(L, 1);
     }
     int err_count = get_redirects(L, 2, params); /* cmd opts ... */
     if (err_count > 0) {
@@ -315,6 +317,7 @@ eli_spawn(lua_State* L) {
     }
     // keep just params and process group at the stack
     lua_getfield(L, 2, "processGroup"); /* -> cmd opts params processGroup/nil */
+    lua_rotate(L, 1, 2);                /* -> params processGroup/nil cmd opts */
     lua_settop(L, 2);                   /* -> params processGroup/nil */
     return spawn_param_execute(L);      /* proc/nil error */
 }
