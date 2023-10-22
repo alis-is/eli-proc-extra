@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Get the list of staged .c and .h files
+STAGED_C_H_FILES=$(git diff --cached --name-only -- '*.c' '*.h')
+
+# Check if there are any staged .c or .h files
+if [ "$STAGED_C_H_FILES" = "" ]; then
+    printf "No C/H files updated\n"
+else
+    # Loop through each staged .c or .h file
+    for file in $STAGED_C_H_FILES; do
+        # Format the file with clang-format
+        clang-format -i "$file"
+        # Add the formatted file to the staging area
+        git add "$file"
+    done
+fi

@@ -5,6 +5,6 @@
 
 #else
 
-extern char **environ;
+extern char** environ;
 
 #endif
