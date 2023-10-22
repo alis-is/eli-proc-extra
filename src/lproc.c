@@ -270,7 +270,7 @@ eli_spawn(lua_State* L) {
             }
             break;
     }
-    int top = 0;
+
     params = spawn_param_init(L);
     /* get filename to execute */
     spawn_param_filename(params, lua_tostring(L, 1));
@@ -295,9 +295,10 @@ eli_spawn(lua_State* L) {
                 if (lua_rawlen(L, 2) > 0) {
                     return luaL_error(L, "cannot specify both the args option and array values");
                 }
-                spawn_param_args(params); /* cmd opts ... */
+                spawn_param_args(L, params); /* cmd opts ... */
                 break;
         }
+        lua_pop(L, 1); /* cmd opts ... */
 
         // env
         lua_getfield(L, 2, "env"); /* cmd opts ... envtab */
@@ -305,7 +306,7 @@ eli_spawn(lua_State* L) {
             default: return luaL_error(L, "bad env option (table expected, got %s)", luaL_typename(L, -1));
             case LUA_TNIL: break;
             case LUA_TTABLE:
-                spawn_param_env(params);
+                spawn_param_env(L, params);
                 /* cmd opts ... */
                 break;
         }

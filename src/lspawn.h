@@ -36,8 +36,8 @@ int proc_create_meta(lua_State* L);
 
 spawn_params* spawn_param_init(lua_State* L);
 void spawn_param_filename(spawn_params* p, const char* filename);
-void spawn_param_args(spawn_params* p);
-void spawn_param_env(spawn_params* p);
+void spawn_param_args(lua_State* L, spawn_params* p);
+void spawn_param_env(lua_State* L, spawn_params* p);
 #ifdef _WIN32
 void spawn_param_redirect(spawn_params* p, int d, HANDLE h);
 #else

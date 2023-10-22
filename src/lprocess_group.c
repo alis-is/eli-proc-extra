@@ -44,7 +44,7 @@ process_tostring(lua_State* L) {
     process_group* p = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     char buf[40];
 #ifdef _WIN32
-    lua_pushlstring(L, buf, sprintf(buf, "process group (%lu)", (unsigned long)p->hJob));
+    lua_pushlstring(L, buf, sprintf(buf, "process group (%p)", (void*)(uintptr_t)p->hJob));
 #else
     lua_pushlstring(L, buf, sprintf(buf, "process group (%lu)", (unsigned long)p->gpid));
 #endif
@@ -71,7 +71,7 @@ process_group_kill(lua_State* L) {
             lua_pushnil(L);
             while (lua_next(L, -2) != 0) {
                 // call kill on each process
-                process* proc = (process*)lua_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
+                process* proc = (process*)luaL_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
                 if (proc == NULL) {
                     lua_pop(L, 1);
                     continue;

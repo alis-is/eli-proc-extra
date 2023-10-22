@@ -45,11 +45,9 @@ spawn_param_init(lua_State* L) {
     spawn_params* p = lua_newuserdatauv(L, sizeof *p, 0);
 #ifdef _WIN32
     static const STARTUPINFO si = {sizeof si};
-    p->L = L;
     p->cmdline = p->environment = 0;
     p->si = si;
 #else
-    p->L = L;
     p->command = 0;
     p->argv = p->envp = 0;
     posix_spawn_file_actions_init(&p->redirect);
@@ -84,7 +82,7 @@ get_argv(lua_State* L) {
     size_t i;
     size_t n = lua_rawlen(L, -1);
 
-    const char** argv = lua_newuserdatauv(L, (n + 2) * sizeof *argv, 0);
+    const char** argv = lua_newuserdatauv(L, (n + 2) * sizeof *argv, 0); // argt argv
 
     for (i = 1; i <= n; i++) {
         lua_rawgeti(L, -2, i); /* ... argt argv arg */
@@ -96,8 +94,7 @@ get_argv(lua_State* L) {
         lua_pop(L, 1); /* ... argt argv */
     }
     argv[n + 1] = 0;
-    lua_pop(L, 2);
-    // lua_replace(L, -2); /* ... argv */
+    lua_pop(L, 1); /* ... argt */
 
     return argv;
 }
@@ -106,7 +103,6 @@ get_argv(lua_State* L) {
 static const char*
 to_win_argv(lua_State* L, const char** argv) {
     luaL_Buffer b;
-    // lua_pop(L, 1); // pop argv
     luaL_buffinit(L, &b);
     for (; *argv; argv++) {
 
@@ -119,15 +115,14 @@ to_win_argv(lua_State* L, const char** argv) {
     }
     luaL_pushresult(&b);
     const char* cmdline = luaL_tolstring(L, -1, NULL);
-    lua_replace(L, 1);
+    lua_pop(L, 2); // luaL_tolstring pushes a copy of the string so we have to pop twice
     return cmdline;
 }
 #endif
 
 /* ... argtab -- ... argtab vector */
 void
-spawn_param_args(spawn_params* p) {
-    lua_State* L = p->L;
+spawn_param_args(lua_State* L, spawn_params* p) {
     const char** argv = get_argv(L); // cmd opts argv
 #ifdef _WIN32
     argv[0] = lua_tostring(L, 1);
@@ -197,8 +192,7 @@ to_win_env(lua_State* L, const char** env) {
 #endif
 
 void
-spawn_param_env(spawn_params* p) {
-    lua_State* L = p->L;
+spawn_param_env(lua_State* L, spawn_params* p) {
     const char** env = get_env(L);
 #ifdef _WIN32
     p->environment = to_win_env(L, env);
@@ -283,7 +277,6 @@ spawn_param_execute(lua_State* L) {
     proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
     proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
     proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
-
 #ifdef _WIN32
     c = strdup(p->cmdline);
     e = (char*)p->environment;        /* strdup(p->environment); */
@@ -294,7 +287,6 @@ spawn_param_execute(lua_State* L) {
     if (success == 1) {
         proc->hProcess = pi.hProcess;
         proc->dwProcessId = pi.dwProcessId;
-
         if (p->createProcessGroup) {
             HANDLE processGroup = CreateJobObject(NULL, NULL);
             if (processGroup == NULL) {
@@ -306,8 +298,7 @@ spawn_param_execute(lua_State* L) {
             }
         }
 
-        lua_rotate(L, -2, 1); // params proc process_group/nil
-
+        lua_rotate(L, -2, -1); // params proc process_group/nil
         process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE); // params proc process_group
         if (pg != NULL && success == 1) {
             if (!AssignProcessToJobObject(pg->hJob, proc->hProcess)) {
@@ -317,15 +308,12 @@ spawn_param_execute(lua_State* L) {
                 proc->isGroupLeader = p->createProcessGroup;
                 // params proc process_group
                 lua_getiuservalue(L, -1, 1); // params proc process_group process_table
-                // bring proc to the top of the stack
-                lua_rotate(L, -3, -2);       // params process_table proc process_group
-                lua_setiuservalue(L, -2, 1); // params process_table proc
-                lua_rotate(L, -2, 1);        // params proc process_table
-
+                lua_rotate(L, -2, 1);        // params proc process_table process_group
+                lua_setiuservalue(L, -3, 1); // params proc process_table
                 // append process to process group
                 // params proc process_table
                 lua_pushvalue(L, -2);                      // params proc process_table process
-                lua_rawseti(L, -1, lua_rawlen(L, -1) + 1); // params proc process_table
+                lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // params proc process_table
                 lua_pop(L, 1);                             // params proc
             }
         } else {
