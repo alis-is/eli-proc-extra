@@ -186,7 +186,7 @@ to_win_env(lua_State* L, const char** env) {
     luaL_pushresult(&b);
 
     const char* winEnv = luaL_tolstring(L, -1, NULL);
-    lua_pop(L, 1); // cleanup
+    lua_pop(L, 2); // luaL_tolstring pushes a copy of the string so we have to pop twice
     return winEnv;
 }
 #endif
