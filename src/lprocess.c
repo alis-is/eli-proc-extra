@@ -102,8 +102,8 @@ process_kill(lua_State* L) {
                 if (!GenerateConsoleCtrlEvent(event, p->dwProcessId)) {
                     return windows_pushlasterror(L);
                 }
-                lua_pushnumber(L, p->status);
-                return 1;
+                //lua_pushnumber(L, p->status);
+                return 0;
             }
             return push_error(L, "on windows it is possible to send SIGINT/SIGTERM "
                                  "only to process in separate process group");
@@ -111,17 +111,17 @@ process_kill(lua_State* L) {
         if (!TerminateProcess(p->hProcess, 0)) {
             return windows_pushlasterror(L);
         }
-        p->status = 0;
+        //p->status = 0;
 #else
         int const status = kill(p->pid, signal);
         if (status == -1) {
             return push_error(L, NULL);
         }
-        p->status = WEXITSTATUS(status);
+        //p->status = WEXITSTATUS(status);
 #endif
     }
-    lua_pushnumber(L, p->status);
-    return 1;
+    //lua_pushnumber(L, p->status);
+    return 0;
 }
 
 /* proc -- string */

@@ -336,15 +336,5 @@ luaopen_eli_proc_extra(lua_State* L) {
     lua_newtable(L);
     luaL_setfuncs(L, eliProcExtra, 0);
 
-    // add table with signals - SIGTERM, SIGKILL and SIGINT
-    lua_newtable(L);
-    lua_pushinteger(L, SIGTERM);
-    lua_setfield(L, -2, "SIGTERM");
-    lua_pushinteger(L, 9 /*SIGKILL*/);
-    lua_setfield(L, -2, "SIGKILL");
-    lua_pushinteger(L, SIGINT);
-    lua_setfield(L, -2, "SIGINT");
-    lua_setfield(L, -2, "signals");
-
     return 1;
 }
