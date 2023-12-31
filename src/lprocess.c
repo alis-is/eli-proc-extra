@@ -92,17 +92,18 @@ process_kill(lua_State* L) {
     if (p->status == -1) {
 #ifdef _WIN32
         DWORD event = -1;
-
         switch (signal) {
             case SIGINT: event = CTRL_C_EVENT; break;
-            case SIGTERM: event = CTRL_CLOSE_EVENT; break;
+            case SIGTERM: event = CTRL_BREAK_EVENT; break;
         }
         if (event != -1) {
             if (p->isSeparateProcessGroup) {
+                if (event == CTRL_C_EVENT) {
+                    return push_error(L, "on windows it is possible to send SIGINT");
+                }
                 if (!GenerateConsoleCtrlEvent(event, p->dwProcessId)) {
                     return windows_pushlasterror(L);
                 }
-                //lua_pushnumber(L, p->status);
                 return 0;
             }
             return push_error(L, "on windows it is possible to send SIGINT/SIGTERM "
@@ -117,10 +118,8 @@ process_kill(lua_State* L) {
         if (status == -1) {
             return push_error(L, NULL);
         }
-        //p->status = WEXITSTATUS(status);
 #endif
     }
-    //lua_pushnumber(L, p->status);
     return 0;
 }
 
