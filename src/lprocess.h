@@ -11,8 +11,6 @@
 
 typedef struct process {
     int status;
-    int isGroupLeader; // on windows it is job leader
-    int isGroupMember; // on windows it is job member
 #ifdef _WIN32
     int isSeparateProcessGroup;
     HANDLE hProcess;

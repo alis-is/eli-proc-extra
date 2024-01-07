@@ -323,8 +323,39 @@ eli_spawn(lua_State* L) {
     return spawn_param_execute(L);      /* proc/nil error */
 }
 
+static int
+eli_get_process_by_id(lua_State* L) {
+    int pid = luaL_checkinteger(L, 1);
+    process* p = lua_newuserdatauv(L, sizeof(process), 1);
+    if (p == NULL) {
+        return push_error(L, "Process not found!");
+    }
+    luaL_getmetatable(L, PROCESS_METATABLE);
+    lua_setmetatable(L, -2);
+    p->status = -1;
+#ifdef _WIN32
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (hProcess == NULL) {
+        CloseHandle(hProcess);
+        return push_error(L, "failed to open process");
+    }
+    p->isSeparateProcessGroup = 0;
+    p->hProcess = hProcess;
+    p->dwProcessId = (DWORD)pid;
+#else
+    if (kill(pid, 0) == -1) {
+        return push_error(L, "failed to open process");
+    }
+    p->pid = pid;
+#endif
+    memset(p->stdio, 0, sizeof(p->stdio)); // zero out stdio
+
+    return 1;
+}
+
 static const struct luaL_Reg eliProcExtra[] = {
     {"spawn", eli_spawn},
+    {"get_process_by_id", eli_get_process_by_id},
     {NULL, NULL},
 };
 

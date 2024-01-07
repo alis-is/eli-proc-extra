@@ -43,6 +43,7 @@ add_argument(luaL_Buffer* b, const char* s) {
 spawn_params*
 spawn_param_init(lua_State* L) {
     spawn_params* p = lua_newuserdatauv(L, sizeof *p, 0);
+    memset(p, 0, sizeof *p);
 #ifdef _WIN32
     static const STARTUPINFO si = {sizeof si};
     p->cmdline = p->environment = 0;
@@ -255,7 +256,6 @@ spawn_param_execute(lua_State* L) {
     spawn_params* p = (spawn_params*)lua_touserdata(L, 1);
 
     int success = 1;
-    process* proc;
 #ifdef _WIN32
     char *c, *e;
     PROCESS_INFORMATION pi;
@@ -270,7 +270,7 @@ spawn_param_execute(lua_State* L) {
         p->envp = (const char**)environ;
     }
 #endif
-    proc = lua_newuserdatauv(L, sizeof *proc, 1); // params process_group proc
+    process* proc = lua_newuserdatauv(L, sizeof *proc, 1); // params process_group proc
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;
@@ -304,8 +304,6 @@ spawn_param_execute(lua_State* L) {
             if (!AssignProcessToJobObject(pg->hJob, proc->hProcess)) {
                 success = 0;
             } else {
-                proc->isGroupMember = !p->createProcessGroup;
-                proc->isGroupLeader = p->createProcessGroup;
                 // params proc process_group
                 lua_getiuservalue(L, -1, 1); // params proc process_group process_table
                 lua_rotate(L, -2, 1);        // params proc process_table process_group
@@ -327,8 +325,6 @@ spawn_param_execute(lua_State* L) {
     if (p->createProcessGroup) {
         if (posix_spawnattr_setpgroup(&p->attr, 0) != 0) {
             success = 0;
-        } else {
-            proc->isGroupLeader = 1;
         }
     } else {
         // params process_group proc
@@ -337,7 +333,6 @@ spawn_param_execute(lua_State* L) {
             if (posix_spawnattr_setpgroup(&p->attr, pg->gpid) != 0) {
                 success = 0;
             } else {
-                proc->isGroupMember = 1;
                 lua_pushvalue(L, 2);         // params process_group proc process_group
                 lua_setiuservalue(L, -2, 1); // params process_group proc
             }
