@@ -9,7 +9,7 @@
 #endif
 
 typedef struct process_group {
-    int status;
+    int closed;
 #ifdef _WIN32
     HANDLE hJob;
 #else

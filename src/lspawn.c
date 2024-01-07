@@ -326,6 +326,9 @@ spawn_param_execute(lua_State* L) {
         if (posix_spawnattr_setpgroup(&p->attr, 0) != 0) {
             success = 0;
         }
+        if (posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0) {
+            success = 0;
+        }
     } else {
         // params process_group proc
         process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);

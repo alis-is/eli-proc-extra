@@ -27,7 +27,7 @@ new_process_group(lua_State* L, pid_t gpid) {
     process_group* pg = lua_newuserdatauv(L, sizeof *pg, 1); // process-group
     luaL_getmetatable(L, PROCESS_GROUP_METATABLE);           // process-group metatable
     lua_setmetatable(L, -2);                                 // process-group
-    pg->status = -1;
+    pg->closed = 0;
     // new table to store processes
     lua_newtable(L);             // process-group process-table
     lua_setiuservalue(L, -2, 1); // Store the process-table in the first uv slot of process-group
@@ -40,7 +40,7 @@ new_process_group(lua_State* L, pid_t gpid) {
 }
 
 static int
-process_tostring(lua_State* L) {
+process_group_tostring(lua_State* L) {
     process_group* p = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     char buf[40];
 #ifdef _WIN32
@@ -57,52 +57,48 @@ process_group_kill(lua_State* L) {
     process_group* p = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     int signal = luaL_optnumber(L, 2, SIGTERM);
 
-    if (p->status == -1) {
 #ifdef _WIN32
-        DWORD event = -1;
-        switch (signal) {
-            case SIGINT: event = CTRL_C_EVENT; break;
-            case SIGTERM: event = CTRL_CLOSE_EVENT; break;
-        }
-        if (event != -1) {
-            // get from user value
-            lua_getiuservalue(L, 1, 1); // process-group process-table
-            // iterate over all processes in the group
-            lua_pushnil(L);
-            while (lua_next(L, -2) != 0) {
-                // call kill on each process
-                process* proc = (process*)luaL_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
-                if (proc == NULL) {
-                    lua_pop(L, 1);
-                    continue;
-                }
-                lua_getmetatable(L, -1);     // key proc metatable
-                lua_getfield(L, -1, "kill"); // key proc metatable kill
-                if (!lua_isfunction(L, -1)) {
-                    lua_pop(L, 3); // key
-                    continue;
-                }
-                lua_pushvalue(L, -3);      // key proc metatable kill proc
-                lua_pushnumber(L, signal); // key proc metatable kill proc signal
-                lua_call(L, 2, 0);         // call --> key proc metatable
-                lua_pop(L, 2);             // key
-            }
-            return 0;
-        }
-        if (!TerminateJobObject(p->hJob, 1)) {
-            return windows_pushlasterror(L);
-        }
-        p->status = 0;
-#else
-        int const status = kill(-p->gpid, signal);
-        if (status == -1) {
-            return push_error(L, NULL);
-        }
-        p->status = 0;
-#endif
+    DWORD event = -1;
+    switch (signal) {
+        case SIGINT: event = CTRL_C_EVENT; break;
+        case SIGTERM: event = CTRL_CLOSE_EVENT; break;
     }
-    lua_pushnumber(L, p->status);
-    return 1;
+    if (event != -1) {
+        // get from user value
+        lua_getiuservalue(L, 1, 1); // process-group process-table
+        // iterate over all processes in the group
+        lua_pushnil(L);
+        while (lua_next(L, -2) != 0) {
+            // call kill on each process
+            process* proc = (process*)luaL_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
+            if (proc == NULL) {
+                lua_pop(L, 1);
+                continue;
+            }
+            lua_getmetatable(L, -1);     // key proc metatable
+            lua_getfield(L, -1, "kill"); // key proc metatable kill
+            if (!lua_isfunction(L, -1)) {
+                lua_pop(L, 3); // key
+                continue;
+            }
+            lua_pushvalue(L, -3);      // key proc metatable kill proc
+            lua_pushnumber(L, signal); // key proc metatable kill proc signal
+            lua_call(L, 2, 0);         // call --> key proc metatable
+            lua_pop(L, 2);             // key
+        }
+        return 0;
+    }
+    if (!TerminateJobObject(p->hJob, 1)) {
+        return windows_pushlasterror(L);
+    }
+#else
+    printf("kill: gpid = %d %d\n", p->gpid, -p->gpid);
+    int const status = kill(-p->gpid, signal);
+    if (status == -1) {
+        return push_error(L, NULL);
+    }
+#endif
+    return 0;
 }
 
 static int
@@ -120,12 +116,11 @@ process_group_join(lua_State* L) {
 static int
 process_group_close(lua_State* L) {
     process_group* p = (process_group*)luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
-    if (p->status == -1) {
-        lua_getiuservalue(L, 1, 1);
+    if (p->closed == 0) {
 #ifdef _WIN32
         CloseHandle(p->hJob);
 #endif
-        p->status = 0;
+        p->closed = 1;
     }
     return 0;
 }
@@ -140,7 +135,7 @@ process_group_create_meta(lua_State* L) {
 
     /* Method table */
     lua_newtable(L);
-    lua_pushcfunction(L, process_tostring);
+    lua_pushcfunction(L, process_group_tostring);
     lua_setfield(L, -2, "__tostring");
     lua_pushcfunction(L, process_group_kill);
     lua_setfield(L, -2, "kill");
