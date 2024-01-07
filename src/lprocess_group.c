@@ -92,7 +92,6 @@ process_group_kill(lua_State* L) {
         return windows_pushlasterror(L);
     }
 #else
-    printf("kill: gpid = %d %d\n", p->gpid, -p->gpid);
     int const status = kill(-p->gpid, signal);
     if (status == -1) {
         return push_error(L, NULL);
