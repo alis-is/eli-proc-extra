@@ -355,7 +355,7 @@ eli_get_process_by_id(lua_State* L) {
 
 static const struct luaL_Reg eliProcExtra[] = {
     {"spawn", eli_spawn},
-    {"get_process_by_id", eli_get_process_by_id},
+    {"get_by_pid", eli_get_process_by_id},
     {NULL, NULL},
 };
 
