@@ -93,22 +93,22 @@ process_kill(lua_State* L) {
 #ifdef _WIN32
         DWORD event = -1;
         switch (signal) {
-            case SIGINT: event = CTRL_C_EVENT; break;
-            case SIGTERM: event = CTRL_BREAK_EVENT; break;
+            case SIGBREAK: event = CTRL_BREAK_EVENT; break;
         }
         if (event != -1) {
-            if (p->isSeparateProcessGroup) {
-                if (event == CTRL_C_EVENT) {
-                    return push_error(L, "on windows it is possible to send SIGINT");
-                }
-                if (!GenerateConsoleCtrlEvent(event, p->dwProcessId)) {
-                    return windows_pushlasterror(L);
-                }
-                return 0;
+            if (!p->isChild) {
+                return push_error(L,
+                                  "it is possible to send SIGBREAK directly only to a spawned child process instance");
             }
-            return push_error(L, "on windows it is possible to send SIGINT/SIGTERM "
-                                 "only to process in separate process group");
+            if (!GenerateConsoleCtrlEvent(event, p->dwProcessId)) {
+                return windows_pushlasterror(L);
+            }
+            return 0;
         }
+        if (signal != 9 /* SIGKILL*/) {
+            return push_error(L, "on windows it is possible to send only SIGBREAK/SIGKILL signals to a process");
+        }
+
         if (!TerminateProcess(p->hProcess, 0)) {
             return windows_pushlasterror(L);
         }

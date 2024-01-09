@@ -12,7 +12,7 @@
 typedef struct process {
     int status;
 #ifdef _WIN32
-    int isSeparateProcessGroup;
+    int isChild;
     HANDLE hProcess;
     DWORD dwProcessId;
 #else

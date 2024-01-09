@@ -332,6 +332,23 @@ eli_get_process_by_id(lua_State* L) {
     }
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
+
+    // if second argument is a table, check options for assume process group
+    if (lua_type(L, 2) == LUA_TTABLE) {                     // pid options process
+        lua_getfield(L, 2, "isSeparateProcessGroup");       // pid options process isSeparateProcessGroup
+        if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) { // pid options process isSeparateProcessGroup
+            // we do not have job, group will be controlled on per process basis...
+            new_process_group(L, (HANDLE)NULL); // pid options process isSeparateProcessGroup process-group
+            lua_getiuservalue(L, -1, 1); // pid options process isSeparateProcessGroup process-group process-table
+            lua_rotate(L, -2, 1);        // pid options process isSeparateProcessGroup process-table process-group
+            lua_setiuservalue(L, -4, 1); // pid options process isSeparateProcessGroup process-table
+
+            lua_pushvalue(L, -3);  // pid options process isSeparateProcessGroup process-table process
+            lua_rawseti(L, -2, 1); // pid options process isSeparateProcessGroup process-table
+            lua_pop(L, 1);         // pid options process isSeparateProcessGroup
+        }
+        lua_pop(L, 1); // pid options process
+    }
     p->status = -1;
 #ifdef _WIN32
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
@@ -339,7 +356,7 @@ eli_get_process_by_id(lua_State* L) {
         CloseHandle(hProcess);
         return push_error(L, "failed to open process");
     }
-    p->isSeparateProcessGroup = 0;
+    p->isChild = 0;
     p->hProcess = hProcess;
     p->dwProcessId = (DWORD)pid;
 #else

@@ -279,9 +279,10 @@ spawn_param_execute(lua_State* L) {
     proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];
 #ifdef _WIN32
     c = strdup(p->cmdline);
-    e = (char*)p->environment;        /* strdup(p->environment); */
-    proc->isSeparateProcessGroup = 1; // if we decide to use different creation flags we may have to adjust
-    success = CreateProcess(0, c, 0, 0, TRUE, CREATE_NEW_PROCESS_GROUP, e, 0, &p->si, &pi) != 0;
+    e = (char*)p->environment; /* strdup(p->environment); */
+    proc->isChild = 1;         // if we decide to use different creation flags we may have to adjust
+    DWORD creationFlags = CREATE_NEW_PROCESS_GROUP | (p->createProcessGroup ? CREATE_NEW_CONSOLE : 0);
+    success = CreateProcess(0, c, 0, 0, TRUE, creationFlags, e, 0, &p->si, &pi) != 0;
     free(c);
 
     if (success == 1) {
