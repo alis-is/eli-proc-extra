@@ -337,8 +337,12 @@ eli_get_process_by_id(lua_State* L) {
     if (lua_type(L, 2) == LUA_TTABLE) {                     // pid options process
         lua_getfield(L, 2, "isSeparateProcessGroup");       // pid options process isSeparateProcessGroup
         if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) { // pid options process isSeparateProcessGroup
-            // we do not have job, group will be controlled on per process basis...
+// we do not have job, group will be controlled on per process basis...
+#ifdef _WIN32
             new_process_group(L, (HANDLE)NULL); // pid options process isSeparateProcessGroup process-group
+#else
+            new_process_group(L, (pid_t)pid); // pid options process isSeparateProcessGroup process-group
+#endif
             lua_getiuservalue(L, -1, 1); // pid options process isSeparateProcessGroup process-group process-table
             lua_rotate(L, -2, 1);        // pid options process isSeparateProcessGroup process-table process-group
             lua_setiuservalue(L, -4, 1); // pid options process isSeparateProcessGroup process-table
