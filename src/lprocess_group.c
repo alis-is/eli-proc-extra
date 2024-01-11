@@ -77,14 +77,13 @@ process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD sign
         return 0;
     }
     commandLine[0] = L'\0';
-
     for (int i = 0; i < pidc; i++) {
         wchar_t temp[12];
         swprintf(temp, 12, L"%lu ", (unsigned long)pid[i]);
         wcscat(commandLine, temp);
     }
     wchar_t temp[12];
-    swprintf(temp, 12, L"%lu ", (unsigned long)signal);
+    swprintf(temp, 12, L"%lu", (unsigned long)signal);
     wcscat(commandLine, temp);
 
     if (CreateProcessW(path, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi) == 0) {
@@ -92,12 +91,12 @@ process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD sign
     }
     free(commandLine);
 
-    DeleteFileW(path);
     int failed =
         WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(pi.hProcess, &exitCode);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
+    DeleteFileW(path);
     if (failed || exitCode != 0) {
         return 0;
     }
@@ -144,9 +143,7 @@ process_group_kill(lua_State* L) {
         lua_getiuservalue(L, 1, 1); // process-group process-table
         // iterate over all processes in the group
         // get length of process table
-        lua_len(L, -1); // process-group process-table length
-        int length = lua_tointeger(L, -1);
-        lua_pop(L, 1); // process-group process-table
+        int length = (int)lua_rawlen(L, -1);
         lua_pushnil(L);
 
         DWORD* pids = malloc(sizeof(DWORD) * length);
@@ -161,8 +158,7 @@ process_group_kill(lua_State* L) {
             }
             pids[index++] = proc->pid;
         }
-        int result = process_group_generate_ctrl_event(L, pids, length, event);
-        if (!result) {
+        if (process_group_generate_ctrl_event(L, pids, length, event) == 0) {
             return push_error(L, NULL);
         }
         return 0;
@@ -185,6 +181,7 @@ process_group_kill(lua_State* L) {
             if (!TerminateProcess(proc->hProcess, 1)) {
                 return windows_pushlasterror(L);
             }
+            lua_pop(L, 1);
         }
         return 0;
     }

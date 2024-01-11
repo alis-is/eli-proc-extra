@@ -333,6 +333,8 @@ eli_get_process_by_id(lua_State* L) {
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
 
+    memset(p->stdio, 0, sizeof(p->stdio)); // zero out stdio
+
     // if second argument is a table, check options for - assume process group
     if (lua_type(L, 2) == LUA_TTABLE) {                     // pid options process
         lua_getfield(L, 2, "isSeparateProcessGroup");       // pid options process isSeparateProcessGroup
@@ -355,7 +357,7 @@ eli_get_process_by_id(lua_State* L) {
     }
     p->status = -1;
 #ifdef _WIN32
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (hProcess == NULL) {
         CloseHandle(hProcess);
         return push_error(L, "failed to open process");
@@ -369,7 +371,6 @@ eli_get_process_by_id(lua_State* L) {
     }
     p->pid = pid;
 #endif
-    memset(p->stdio, 0, sizeof(p->stdio)); // zero out stdio
 
     return 1;
 }

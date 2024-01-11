@@ -2,14 +2,14 @@
 
 int
 main(int argc, char* argv[]) {
-    if (argc < 3) {
+    if (argc < 2) {
         return 1;
     }
     int success = 1;
 
     DWORD ctrlSignal = (DWORD)_atoi64(argv[argc - 1]);
     for (int i = 0; i < argc - 1; i++) {
-        int pid = atoi(argv[i]);
+        DWORD pid = (DWORD)_atoi64(argv[i]);
         FreeConsole();
         if (!AttachConsole(pid) || !GenerateConsoleCtrlEvent(ctrlSignal, 0)) {
             success = 0;
