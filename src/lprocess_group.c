@@ -14,83 +14,99 @@
 #ifdef _WIN32
 #include <windows.h>
 #include "kill.h"
-
-DWORD
-process_group_generate_ctrl_event(lua_State* L, DWORD dwProcessId, DWORD signal) {
-    // create temp file and write kill binary into it
-    // run kill binary with pid and signal
-
-    char path[MAX_PATH];
-    if (GetTempPath(MAX_PATH, path) == 0) {
-        // Handle error: Failed to retrieve temporary path
-        return 0;
-    }
-
-    if (GetTempFileName(path, "kill", 0, NULL) == 0) {
-        // Handle error: Failed to generate temporary file name
-        return 0;
-    }
-
-    // Append ".exe" extension to the generated temporary file path
-    size_t pathLength = strlen(path);
-    size_t extensionLength = strlen(".exe");
-    if (pathLength + extensionLength >= MAX_PATH) {
-        // Adjust the path to fit the extension
-        path[MAX_PATH - extensionLength - 1] = '\0';
-    }
-    if (strcat(path, ".exe") == NULL) {
-        // Handle error: Failed to append extension to path
-        return 0;
-    }
-
-    HANDLE exeFile = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
-                                FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
-    if (exeFile == INVALID_HANDLE_VALUE) {
-        return 0;
-    }
-
-    unsigned long size = 0;
-    DWORD written = 0;
-    if (WriteFile(exeFile, killBinary, KILL_BINARY_SIZE, &written, NULL) == 0 || written != KILL_BINARY_SIZE) {
-        CloseHandle(exeFile);
-        return 0;
-    }
-
-    DWORD exitCode = -1;
-    char commandLine[40];
-    sprintf(commandLine, "%lu %lu", (unsigned long)dwProcessId, (unsigned long)signal);
-    PROCESS_INFORMATION pi;
-
-    STARTUPINFO si;
-    if (CreateProcess(path, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi) == 0) {
-        CloseHandle(exeFile);
-        return 0;
-    }
-    CloseHandle(exeFile);
-    if (WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(pi.hProcess, &exitCode)) {
-        CloseHandle(pi.hProcess);
-        return 0;
-    }
-    CloseHandle(pi.hProcess);
-
-    if (exitCode == 0) {
-        return 1;
-    }
-    return 0;
-}
-
 #else
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
 
 #ifdef _WIN32
-void
-new_process_group(lua_State* L, HANDLE hJob) {
-#else
-void
-new_process_group(lua_State* L, pid_t gpid) {
+DWORD
+process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD signal) {
+    // create temp file and write kill binary into it
+    // run kill binary with pid and signal
+    wchar_t path[MAX_PATH];
+    if (GetTempPathW(MAX_PATH, path) == 0) {
+        // Handle error: Failed to retrieve temporary path
+        return 0;
+    }
+
+    if (GetTempFileNameW(path, L"kill", 0, path) == 0) {
+        // Handle error: Failed to generate temporary file name
+        return 0;
+    }
+    DeleteFileW(path);
+
+    // Append ".exe" extension to the generated temporary file path
+    size_t pathLength = wcslen(path);
+    wchar_t const* extension = L".exe";
+    size_t extensionLength = wcslen(extension);
+    if (pathLength + extensionLength + 1 >= MAX_PATH) {
+        // Adjust the path to fit the extension and the null terminator
+        path[MAX_PATH - extensionLength - 1] = L'\0';
+    }
+    if (wcscat(path, extension) == NULL) {
+        // Handle error: Failed to append extension to path
+        return 0;
+    }
+
+    HANDLE exeFile = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
+                                 FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    if (exeFile == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+
+    unsigned long size = 0;
+    DWORD written = 0;
+    int writeResult = WriteFile(exeFile, killBinary, KILL_BINARY_SIZE, &written, NULL);
+    CloseHandle(exeFile);
+    if (writeResult == 0 || written != KILL_BINARY_SIZE) {
+        return 0;
+    }
+
+    CloseHandle(exeFile);
+
+    DWORD exitCode = -1;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    STARTUPINFO si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+
+    wchar_t* commandLine = malloc(sizeof(wchar_t) * 12 * pidc);
+    if (commandLine == NULL) {
+        return 0;
+    }
+    commandLine[0] = L'\0';
+
+    for (int i = 0; i < pidc; i++) {
+        wchar_t temp[12];
+        swprintf(temp, 12, L"%lu ", (unsigned long)pid[i]);
+        wcscat(commandLine, temp);
+    }
+    wchar_t temp[12];
+    swprintf(temp, 12, L"%lu ", (unsigned long)signal);
+    wcscat(commandLine, temp);
+
+    if (CreateProcessW(path, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi) == 0) {
+        return 0;
+    }
+    free(commandLine);
+
+    DeleteFileW(path);
+    int failed =
+        WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    if (failed || exitCode != 0) {
+        return 0;
+    }
+    return 1;
+}
 #endif
+
+void
+new_process_group(lua_State* L, process_group_id gid) {
     process_group* pg = lua_newuserdatauv(L, sizeof(process_group), 1); // process-group
     memset(pg, 0, sizeof(process_group));
     luaL_getmetatable(L, PROCESS_GROUP_METATABLE); // process-group metatable
@@ -100,22 +116,14 @@ new_process_group(lua_State* L, pid_t gpid) {
     lua_newtable(L);             // process-group process-table
     lua_setiuservalue(L, -2, 1); // Store the process-table in the first uv slot of process-group
 
-#ifdef _WIN32
-    pg->hJob = hJob;
-#else
-    pg->gpid = gpid;
-#endif
+    pg->gid = gid;
 }
 
 static int
 process_group_tostring(lua_State* L) {
     process_group* p = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     char buf[40];
-#ifdef _WIN32
-    lua_pushlstring(L, buf, sprintf(buf, "process group (%p)", (void*)(uintptr_t)p->hJob));
-#else
-    lua_pushlstring(L, buf, sprintf(buf, "process group (%lu)", (unsigned long)p->gpid));
-#endif
+    lua_pushlstring(L, buf, sprintf(buf, "process group (%lu)", (unsigned long)p->gid));
     return 1;
 }
 
@@ -135,18 +143,27 @@ process_group_kill(lua_State* L) {
         // get from user value
         lua_getiuservalue(L, 1, 1); // process-group process-table
         // iterate over all processes in the group
+        // get length of process table
+        lua_len(L, -1); // process-group process-table length
+        int length = lua_tointeger(L, -1);
+        lua_pop(L, 1); // process-group process-table
         lua_pushnil(L);
+
+        DWORD* pids = malloc(sizeof(DWORD) * length);
+
+        int index = 0;
         while (lua_next(L, -2) != 0) {
             // call kill on each process
             process* proc = (process*)luaL_testudata(L, -1, PROCESS_METATABLE); // key, proc/nil
+            lua_pop(L, 1);
             if (proc == NULL) {
-                lua_pop(L, 1);
                 continue;
             }
-
-            if (!process_group_generate_ctrl_event(L, proc->dwProcessId, event)) {
-                return push_error(L, NULL);
-            }
+            pids[index++] = proc->pid;
+        }
+        int result = process_group_generate_ctrl_event(L, pids, length, event);
+        if (!result) {
+            return push_error(L, NULL);
         }
         return 0;
     }
@@ -154,7 +171,7 @@ process_group_kill(lua_State* L) {
         return push_error(L,
                           "on windows it is possible to send only SIGINT/SIGBREAK/SIGKILL signals to a process group");
     }
-    if (p->hJob == NULL) {          // iterate and terminate directly
+    if (p->gid == NULL) {           // iterate and terminate directly
         lua_getiuservalue(L, 1, 1); // process-group process-table
         // iterate over all processes in the group
         lua_pushnil(L);
@@ -171,11 +188,11 @@ process_group_kill(lua_State* L) {
         }
         return 0;
     }
-    if (!TerminateJobObject(p->hJob, 1)) {
+    if (!TerminateJobObject(p->gid, 1)) {
         return windows_pushlasterror(L);
     }
 #else
-    int const status = kill(-p->gpid, signal);
+    int const status = kill(-p->gid, signal);
     if (status == -1) {
         return push_error(L, NULL);
     }
@@ -200,7 +217,7 @@ process_group_close(lua_State* L) {
     process_group* p = (process_group*)luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     if (p->closed == 0) {
 #ifdef _WIN32
-        CloseHandle(p->hJob);
+        CloseHandle(p->gid);
 #endif
         p->closed = 1;
     }

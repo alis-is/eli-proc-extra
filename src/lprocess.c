@@ -22,11 +22,7 @@ static int
 process_pid(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     if (p->status == -1) {
-#ifdef _WIN32
-        lua_pushnumber(L, p->dwProcessId);
-#else
         lua_pushnumber(L, p->pid);
-#endif
     } else {
         lua_pushnumber(L, -1);
     }
@@ -100,7 +96,7 @@ process_kill(lua_State* L) {
                 return push_error(L,
                                   "it is possible to send SIGBREAK directly only to a spawned child process instance");
             }
-            if (!GenerateConsoleCtrlEvent(event, p->dwProcessId)) {
+            if (!GenerateConsoleCtrlEvent(event, p->pid)) {
                 return windows_pushlasterror(L);
             }
             return 0;
@@ -134,9 +130,6 @@ process_tostring(lua_State* L) {
         return windows_pushlasterror(L);
     }
     p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
-    lua_pushlstring(
-        L, buf,
-        sprintf(buf, "process (%lu, %s)", (unsigned long)p->dwProcessId, p->status == -1 ? "running" : "terminated"));
 #else
     int status = 0;
     int res = waitpid(p->pid, &status, WNOHANG);
@@ -145,9 +138,9 @@ process_tostring(lua_State* L) {
     } else if (res == -1) {
         p->status = 0;
     }
+#endif
     lua_pushlstring(
         L, buf, sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid, p->status == -1 ? "running" : "terminated"));
-#endif
 
     return 1;
 }

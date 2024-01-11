@@ -362,7 +362,7 @@ eli_get_process_by_id(lua_State* L) {
     }
     p->isChild = 0;
     p->hProcess = hProcess;
-    p->dwProcessId = (DWORD)pid;
+    p->pid = (DWORD)pid;
 #else
     if (kill(pid, 0) == -1) {
         return push_error(L, "failed to open process");

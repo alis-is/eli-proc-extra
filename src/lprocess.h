@@ -5,8 +5,12 @@
 
 #ifdef _WIN32
 #include <windows.h>
+
+#define process_id DWORD
 #else
 #include <unistd.h>
+
+#define process_id pid_t
 #endif
 
 typedef struct process {
@@ -14,10 +18,8 @@ typedef struct process {
 #ifdef _WIN32
     int isChild;
     HANDLE hProcess;
-    DWORD dwProcessId;
-#else
-    pid_t pid;
 #endif
+    process_id pid;
     stdioChannel* stdio[3];
 } process;
 

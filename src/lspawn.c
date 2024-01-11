@@ -281,13 +281,15 @@ spawn_param_execute(lua_State* L) {
     c = strdup(p->cmdline);
     e = (char*)p->environment; /* strdup(p->environment); */
     proc->isChild = 1;         // if we decide to use different creation flags we may have to adjust
-    DWORD creationFlags = CREATE_NEW_PROCESS_GROUP | (p->createProcessGroup ? CREATE_NEW_CONSOLE : 0);
+    DWORD creationFlags =
+        CREATE_NEW_PROCESS_GROUP
+        | (p->createProcessGroup || luaL_testudata(L, 2, PROCESS_GROUP_METATABLE) != NULL ? CREATE_NEW_CONSOLE : 0);
     success = CreateProcess(0, c, 0, 0, TRUE, creationFlags, e, 0, &p->si, &pi) != 0;
     free(c);
 
     if (success == 1) {
         proc->hProcess = pi.hProcess;
-        proc->dwProcessId = pi.dwProcessId;
+        proc->pid = pi.dwProcessId;
         if (p->createProcessGroup) {
             HANDLE processGroup = CreateJobObject(NULL, NULL);
             if (processGroup == NULL) {
@@ -302,7 +304,7 @@ spawn_param_execute(lua_State* L) {
         lua_rotate(L, -2, -1); // params proc process_group/nil
         process_group* pg = (process_group*)luaL_testudata(L, -1, PROCESS_GROUP_METATABLE); // params proc process_group
         if (pg != NULL && success == 1) {
-            if (!AssignProcessToJobObject(pg->hJob, proc->hProcess)) {
+            if (!AssignProcessToJobObject(pg->gid, proc->hProcess)) {
                 success = 0;
             } else {
                 // params proc process_group
@@ -334,7 +336,7 @@ spawn_param_execute(lua_State* L) {
         // params process_group proc
         process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
         if (pg != NULL) {
-            if (posix_spawnattr_setpgroup(&p->attr, pg->gpid) != 0) {
+            if (posix_spawnattr_setpgroup(&p->attr, pg->gid) != 0) {
                 success = 0;
             } else {
                 lua_pushvalue(L, 2);         // params process_group proc process_group
