@@ -326,17 +326,16 @@ spawn_param_execute(lua_State* L) {
 #else
     errno = 0;
     if (p->createProcessGroup) {
-        if (posix_spawnattr_setpgroup(&p->attr, 0) != 0) {
-            success = 0;
-        }
-        if (posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0) {
+        if (posix_spawnattr_setpgroup(&p->attr, 0) != 0
+            || posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0) {
             success = 0;
         }
     } else {
         // params process_group proc
         process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
         if (pg != NULL) {
-            if (posix_spawnattr_setpgroup(&p->attr, pg->gid) != 0) {
+            if (posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0
+                || posix_spawnattr_setpgroup(&p->attr, pg->gid) != 0) {
                 success = 0;
             } else {
                 lua_pushvalue(L, 2);         // params process_group proc process_group

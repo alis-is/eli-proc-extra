@@ -333,7 +333,7 @@ eli_get_process_by_id(lua_State* L) {
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
 
-    // if second argument is a table, check options for assume process group
+    // if second argument is a table, check options for - assume process group
     if (lua_type(L, 2) == LUA_TTABLE) {                     // pid options process
         lua_getfield(L, 2, "isSeparateProcessGroup");       // pid options process isSeparateProcessGroup
         if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) { // pid options process isSeparateProcessGroup
