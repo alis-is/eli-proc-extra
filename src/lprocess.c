@@ -28,7 +28,17 @@ process_pid(lua_State* L) {
     }
     return 1;
 }
-
+#ifndef _WIN32
+static int
+get_process_exit_code(process* p, int status) {
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        return -WTERMSIG(status); // Negative signal number
+    }
+    return 0;
+}
+#endif
 /* proc -- exitcode/nil error */
 static int
 process_wait(lua_State* L) {
@@ -47,13 +57,13 @@ process_wait(lua_State* L) {
         int status = 0;
         int res = waitpid(p->pid, &status, WNOHANG);
         if (p->pid == res) {
-            p->status = WEXITSTATUS(status);
+            p->status = get_process_exit_code(p, status);
         } else if (interval > 0) {
             int elapsed = 0;
             while (p->status == -1 && elapsed < interval) {
                 int res = waitpid(p->pid, &status, WNOHANG);
                 if (p->pid == res) {
-                    p->status = WEXITSTATUS(status);
+                    p->status = get_process_exit_code(p, status);
                     break;
                 } else if (res == -1) {
                     p->status = 0;
@@ -64,14 +74,14 @@ process_wait(lua_State* L) {
                 elapsed++;
             }
             if (p->status != -1) {
-                p->status = WEXITSTATUS(status);
+                p->status = get_process_exit_code(p, status);
             }
         } else {
             int status;
             if (-1 == waitpid(p->pid, &status, 0)) {
                 return push_error(L, NULL);
             }
-            p->status = WEXITSTATUS(status);
+            p->status = get_process_exit_code(p, status);
         }
 #endif
     }
@@ -105,7 +115,7 @@ process_kill(lua_State* L) {
             return push_error(L, "on windows it is possible to send only SIGBREAK/SIGKILL signals to a process");
         }
 
-        if (!TerminateProcess(p->hProcess, 0)) {
+        if (!TerminateProcess(p->hProcess, 1)) {
             return windows_pushlasterror(L);
         }
         //p->status = 0;
