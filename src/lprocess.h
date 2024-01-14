@@ -15,6 +15,7 @@
 
 typedef struct process {
     int status;
+    int signal;
 #ifdef _WIN32
     int isChild;
     HANDLE hProcess;

@@ -356,6 +356,7 @@ eli_get_process_by_id(lua_State* L) {
         lua_pop(L, 1); // pid options process
     }
     p->status = -1;
+    p->signal = 0;
 #ifdef _WIN32
     HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (hProcess == NULL) {

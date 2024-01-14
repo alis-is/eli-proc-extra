@@ -274,6 +274,7 @@ spawn_param_execute(lua_State* L) {
     luaL_getmetatable(L, PROCESS_METATABLE);
     lua_setmetatable(L, -2);
     proc->status = -1;
+    proc->signal = 0;
     proc->stdio[STDIO_STDIN] = p->stdio[STDIO_STDIN];
     proc->stdio[STDIO_STDOUT] = p->stdio[STDIO_STDOUT];
     proc->stdio[STDIO_STDERR] = p->stdio[STDIO_STDERR];

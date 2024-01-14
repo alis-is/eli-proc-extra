@@ -29,14 +29,14 @@ process_pid(lua_State* L) {
     return 1;
 }
 #ifndef _WIN32
-static int
-get_process_exit_code(process* p, int status) {
+static void
+update_process_exit_status(process* p, int status) {
     if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
+        p->status = WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
-        return -WTERMSIG(status); // Negative signal number
+        p->signal = WTERMSIG(status);
+        p->status = 0;
     }
-    return 0;
 }
 #endif
 /* proc -- exitcode/nil error */
@@ -57,13 +57,13 @@ process_wait(lua_State* L) {
         int status = 0;
         int res = waitpid(p->pid, &status, WNOHANG);
         if (p->pid == res) {
-            p->status = get_process_exit_code(p, status);
+            update_process_exit_status(p, status);
         } else if (interval > 0) {
             int elapsed = 0;
             while (p->status == -1 && elapsed < interval) {
                 int res = waitpid(p->pid, &status, WNOHANG);
                 if (p->pid == res) {
-                    p->status = get_process_exit_code(p, status);
+                    update_process_exit_status(p, status);
                     break;
                 } else if (res == -1) {
                     p->status = 0;
@@ -74,14 +74,14 @@ process_wait(lua_State* L) {
                 elapsed++;
             }
             if (p->status != -1) {
-                p->status = get_process_exit_code(p, status);
+                update_process_exit_status(p, status);
             }
         } else {
             int status;
             if (-1 == waitpid(p->pid, &status, 0)) {
                 return push_error(L, NULL);
             }
-            p->status = get_process_exit_code(p, status);
+            update_process_exit_status(p, status);
         }
 #endif
     }
@@ -147,7 +147,7 @@ process_tostring(lua_State* L) {
         int status = 0;
         int res = waitpid(p->pid, &status, WNOHANG);
         if (p->pid == res) {
-            p->status = get_process_exit_code(p, status);
+            update_process_exit_status(p, status);
         }
 #endif
     }
@@ -174,12 +174,14 @@ process_exitcode(lua_State* L) {
             return push_error(L, NULL);
         }
         if (res != 0) {
-            p->status = get_process_exit_code(p, status);
+            update_process_exit_status(p, status);
         }
 #endif
     }
-    lua_pushinteger(L, p->status);
-    return 1;
+    lua_pushinteger(
+        L, p->status == 0 && p->signal > 0 ? p->signal + 255 /* linux exit codes are in range 0 - 255 */ : p->status);
+    lua_pushinteger(L, p->signal);
+    return 2;
 }
 
 static int
@@ -203,7 +205,7 @@ process_exited(lua_State* L) {
         if (res == 0) {
             active = 1;
         } else {
-            p->status = get_process_exit_code(p, status);
+            update_process_exit_status(p, status);
         }
 #endif
     }
