@@ -35,7 +35,8 @@ update_process_exit_status(process* p, int status) {
         p->status = WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
         p->signal = WTERMSIG(status);
-        p->status = 0;
+        /* linux exit codes are in range 0 - 255 */
+        p->status = 255 + p->signal;
     }
 }
 #endif
@@ -86,7 +87,8 @@ process_wait(lua_State* L) {
 #endif
     }
     lua_pushinteger(L, p->status);
-    return 1;
+    lua_pushinteger(L, p->signal);
+    return 2;
 }
 
 /* proc -- exitcode/nil error */
@@ -178,8 +180,7 @@ process_exitcode(lua_State* L) {
         }
 #endif
     }
-    lua_pushinteger(
-        L, p->status == 0 && p->signal > 0 ? p->signal + 255 /* linux exit codes are in range 0 - 255 */ : p->status);
+    lua_pushinteger(L, p->status);
     lua_pushinteger(L, p->signal);
     return 2;
 }
