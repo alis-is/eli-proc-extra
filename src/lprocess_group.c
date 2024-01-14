@@ -161,7 +161,8 @@ process_group_kill(lua_State* L) {
         if (process_group_generate_ctrl_event(L, pids, length, event) == 0) {
             return push_error(L, NULL);
         }
-        return 0;
+        lua_pushboolean(L, 1);
+        return 1;
     }
     if (signal != 9) {
         return push_error(L,
@@ -183,7 +184,8 @@ process_group_kill(lua_State* L) {
             }
             lua_pop(L, 1);
         }
-        return 0;
+        lua_pushboolean(L, 1);
+        return 1;
     }
     if (!TerminateJobObject(p->gid, 1)) {
         return windows_pushlasterror(L);
@@ -194,7 +196,8 @@ process_group_kill(lua_State* L) {
         return push_error(L, NULL);
     }
 #endif
-    return 0;
+    lua_pushboolean(L, 1);
+    return 1;
 }
 
 static int

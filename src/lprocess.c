@@ -109,7 +109,8 @@ process_kill(lua_State* L) {
             if (!GenerateConsoleCtrlEvent(event, p->pid)) {
                 return windows_pushlasterror(L);
             }
-            return 0;
+            lua_pushboolean(L, 1);
+            return 1;
         }
         if (signal != 9 /* SIGKILL*/) {
             return push_error(L, "on windows it is possible to send only SIGBREAK/SIGKILL signals to a process");
@@ -126,7 +127,8 @@ process_kill(lua_State* L) {
         }
 #endif
     }
-    return 0;
+    lua_pushboolean(L, 1);
+    return 1;
 }
 
 /* proc -- string */
@@ -134,21 +136,21 @@ static int
 process_tostring(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     char buf[50];
+    if (p->status == -1) {
 #ifdef _WIN32
-    DWORD exitcode;
-    if (!GetExitCodeProcess(p->hProcess, &exitcode)) {
-        return windows_pushlasterror(L);
-    }
-    p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
+        DWORD exitcode;
+        if (!GetExitCodeProcess(p->hProcess, &exitcode)) {
+            return windows_pushlasterror(L);
+        }
+        p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
 #else
-    int status = 0;
-    int res = waitpid(p->pid, &status, WNOHANG);
-    if (p->pid == res) {
-        p->status = WEXITSTATUS(status);
-    } else if (res == -1) {
-        p->status = 0;
-    }
+        int status = 0;
+        int res = waitpid(p->pid, &status, WNOHANG);
+        if (p->pid == res) {
+            p->status = get_process_exit_code(p, status);
+        }
 #endif
+    }
     lua_pushlstring(
         L, buf, sprintf(buf, "process (%lu, %s)", (unsigned long)p->pid, p->status == -1 ? "running" : "terminated"));
 
@@ -172,7 +174,7 @@ process_exitcode(lua_State* L) {
             return push_error(L, NULL);
         }
         if (res != 0) {
-            p->status = WEXITSTATUS(status);
+            p->status = get_process_exit_code(p, status);
         }
 #endif
     }
@@ -201,7 +203,7 @@ process_exited(lua_State* L) {
         if (res == 0) {
             active = 1;
         } else {
-            p->status = WEXITSTATUS(status);
+            p->status = get_process_exit_code(p, status);
         }
 #endif
     }
