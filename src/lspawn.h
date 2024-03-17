@@ -12,7 +12,9 @@
 #else
 #include "environ.h"
 
+#include <pwd.h>
 #include <spawn.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #endif
@@ -28,6 +30,7 @@ typedef struct spawn_params {
     posix_spawn_file_actions_t redirect;
     posix_spawnattr_t attr;
 #endif
+    const char *username, *password;
     stdioChannel* stdio[3];
     int createProcessGroup;
 } spawn_params;

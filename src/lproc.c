@@ -283,6 +283,18 @@ eli_spawn(lua_State* L) {
         }
         lua_pop(L, 1); /* cmd opts ... */
 
+        lua_getfield(L, 2, "username"); /* cmd opts ... createProcessGroup */
+        if (lua_type(L, -1) == LUA_TSTRING) {
+            params->username = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1); /* cmd opts ... */
+
+        lua_getfield(L, 2, "password"); /* cmd opts ... createProcessGroup */
+        if (lua_type(L, -1) == LUA_TSTRING) {
+            params->password = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1); /* cmd opts ... */
+
         // options
         lua_getfield(L, 2, "args"); /* cmd opts ... argtab */
         switch (lua_type(L, -1)) {

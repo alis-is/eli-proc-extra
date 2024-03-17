@@ -54,6 +54,8 @@ spawn_param_init(lua_State* L) {
     posix_spawn_file_actions_init(&p->redirect);
     posix_spawnattr_init(&p->attr);
 #endif
+    p->username = NULL;
+    p->password = NULL;
     p->stdio[STDIO_STDIN] = NULL;
     p->stdio[STDIO_STDOUT] = NULL;
     p->stdio[STDIO_STDERR] = NULL;
@@ -344,11 +346,28 @@ spawn_param_execute(lua_State* L) {
             }
         }
     }
+    if (success == 1 && p->username != NULL) {
+        struct passwd* pwd = getpwnam(p->username);
+        if (pwd == NULL) {
+            success = 0;
+        } else {
+            if (setegid(pwd->pw_gid) != 0 || seteuid(pwd->pw_uid) != 0) {
+                success = 0;
+            }
+        }
+    }
+
     // params process_group proc
     if (success == 1) {
         success =
             posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr, (char* const*)p->argv, (char* const*)p->envp)
             == 0;
+        if (p->username != NULL) {
+            if (setegid(getgid()) != 0 || seteuid(getuid()) != 0) {
+                success = 0;
+            }
+        }
+
         if (success == 1) {
             if (p->createProcessGroup) {
                 new_process_group(L, proc->pid); // params process_group proc process_group
