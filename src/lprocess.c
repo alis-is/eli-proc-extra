@@ -22,9 +22,9 @@ static int
 process_pid(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     if (p->status == -1) {
-        lua_pushnumber(L, p->pid);
+        lua_pushinteger(L, p->pid);
     } else {
-        lua_pushnumber(L, -1);
+        lua_pushinteger(L, -1);
     }
     return 1;
 }
@@ -372,6 +372,8 @@ process_create_meta(lua_State* L) {
     lua_setfield(L, -2, "__tostring");
     lua_pushcfunction(L, process_pid);
     lua_setfield(L, -2, "pid");
+    lua_pushcfunction(L, process_pid);
+    lua_setfield(L, -2, "get_pid");
     lua_pushcfunction(L, process_wait);
     lua_setfield(L, -2, "wait");
     lua_pushcfunction(L, process_kill);

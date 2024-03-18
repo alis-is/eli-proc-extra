@@ -61,9 +61,8 @@ lcheck_option_with_fallback(lua_State* L, int arg, const char* def, const char* 
 
 static int
 get_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
-    stdioChannel* channel = malloc(sizeof(stdioChannel));
+    stdioChannel* channel = calloc(1, sizeof(stdioChannel));
     channel->fdToClose = -1;
-    channel->path = NULL;
     lua_getfield(L, idx, stdname);
 
     int stdioKind;

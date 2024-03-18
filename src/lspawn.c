@@ -51,8 +51,7 @@ spawn_param_init(lua_State* L) {
 #else
     p->command = 0;
     p->argv = p->envp = 0;
-    posix_spawn_file_actions_init(&p->redirect);
-    posix_spawnattr_init(&p->attr);
+    p->redirect[0] = p->redirect[1] = p->redirect[2] = -1;
 #endif
     p->username = NULL;
     p->password = NULL;
@@ -223,7 +222,7 @@ spawn_param_redirect(spawn_params* p, int d, HANDLE h) {
 #else
 void
 spawn_param_redirect(spawn_params* p, int d, int fd) {
-    posix_spawn_file_actions_adddup2(&p->redirect, fd, d);
+    p->redirect[d] = fd;
 }
 #endif
 
@@ -252,6 +251,48 @@ close_stdio_channel(process* p, int stdKind) {
     p->stdio[stdKind] = NULL;
     free(channel);
 }
+
+#ifndef _WIN32
+
+static void
+child_finalize_error(int error_pipe) {
+    int err = errno;
+    write(error_pipe, &err, sizeof(err));
+    close(error_pipe);
+    _exit(EXIT_FAILURE);
+}
+
+static int
+child_init(int error_pipe, int uid, int gid, pid_t pgid, spawn_params* p) {
+    int flags = fcntl(error_pipe, F_GETFD);
+    if (flags == -1) {
+        child_finalize_error(error_pipe);
+    }
+
+    flags |= FD_CLOEXEC;
+    if (fcntl(error_pipe, F_SETFD, flags) == -1) {
+        child_finalize_error(error_pipe);
+    }
+
+    if ((uid != -1 && setegid(uid) != 0) || (gid != -1 && seteuid(gid) != 0)) {
+        child_finalize_error(error_pipe);
+    }
+
+    if (pgid != -1 && setpgid(0, pgid) != 0) {
+        child_finalize_error(error_pipe);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        if (p->redirect[i] != -1) {
+            dup2(p->redirect[i], i);
+        }
+    }
+
+    execve_spawnp(p->command, (char* const*)p->argv, (char* const*)p->envp);
+    child_finalize_error(error_pipe);
+}
+
+#endif
 
 int
 spawn_param_execute(lua_State* L) {
@@ -328,67 +369,83 @@ spawn_param_execute(lua_State* L) {
 
 #else
     errno = 0;
-    if (p->createProcessGroup) {
-        if (posix_spawnattr_setpgroup(&p->attr, 0) != 0
-            || posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0) {
-            success = 0;
-        }
-    } else {
-        // params process_group proc
-        process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
-        if (pg != NULL) {
-            if (posix_spawnattr_setflags(&p->attr, POSIX_SPAWN_SETPGROUP) != 0
-                || posix_spawnattr_setpgroup(&p->attr, pg->gid) != 0) {
-                success = 0;
-            } else {
-                lua_pushvalue(L, 2);         // params process_group proc process_group
-                lua_setiuservalue(L, -2, 1); // params process_group proc
-            }
-        }
-    }
+    // impersonation
+    int uid = -1, gid = -1;
     if (success == 1 && p->username != NULL) {
         struct passwd* pwd = getpwnam(p->username);
         if (pwd == NULL) {
             success = 0;
         } else {
-            if (setegid(pwd->pw_gid) != 0 || seteuid(pwd->pw_uid) != 0) {
-                success = 0;
-            }
+            uid = pwd->pw_uid;
+            gid = pwd->pw_gid;
         }
     }
 
+    // process group
     // params process_group proc
+    pid_t pid, pgid = -1;
+    if (p->createProcessGroup) {
+        pgid = 0; // create new process group
+    } else {
+        process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
+        if (pg != NULL) {
+            pgid = pg->gid;
+        }
+        lua_pushvalue(L, 2);         // params process_group proc process_group
+        lua_setiuservalue(L, -2, 1); // params process_group proc
+    }
+    int pipefd[2];
+    if (success == 1 && pipe(pipefd) == -1) {
+        success = 0;
+    }
+
     if (success == 1) {
-        success =
-            posix_spawnp(&proc->pid, p->command, &p->redirect, &p->attr, (char* const*)p->argv, (char* const*)p->envp)
-            == 0;
-        if (p->username != NULL) {
-            if (setegid(getgid()) != 0 || seteuid(getuid()) != 0) {
+        pid = fork();
+        if (pid == -1) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            success = 0;
+        }
+    }
+
+    if (success == 1) {
+        if (pid == 0) {
+            // child
+            close(pipefd[0]); // Close read end of the pipe
+
+            child_init(pipefd[1], uid, gid, pgid, p);
+        } else {
+            // parent
+            close(pipefd[1]); // Close write end of the pipe
+            int err;
+            if (read(pipefd[0], &err, sizeof(err)) > 0) {
+                waitpid(pid, NULL, 0); // Clean up the child process
+                errno = err;
                 success = 0;
             }
-        }
 
-        if (success == 1) {
-            if (p->createProcessGroup) {
-                new_process_group(L, proc->pid); // params process_group proc process_group
-                lua_copy(L, -1, -3);             // params process_group proc process_group
-                lua_setiuservalue(L, -2, 1);     // params process_group proc
-            }
-
-            process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
-            if (pg != NULL) {
-                lua_getiuservalue(L, 2, 1);                // params process_group proc process_table
-                lua_pushvalue(L, -2);                      // params process_group process process_table process
-                lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // params process_group process process_table
-                lua_pop(L, 1);                             // params process_group process
-            }
+            close(pipefd[0]);
         }
     }
 
     if (success == 1) {
-        posix_spawn_file_actions_destroy(&p->redirect);
-        posix_spawnattr_destroy(&p->attr);
+        proc->pid = pid;
+
+        if (p->createProcessGroup) {
+            new_process_group(L, proc->pid); // params process_group proc process_group
+            lua_copy(L, -1, -3);             // params process_group proc process_group
+            lua_setiuservalue(L, -2, 1);     // params process_group proc
+        }
+        // inject process into process group
+        process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
+        if (pg != NULL) {
+            lua_getiuservalue(L, 2, 1);                // params process_group proc process_table
+            lua_pushvalue(L, -2);                      // params process_group process process_table process
+            lua_rawseti(L, -2, lua_rawlen(L, -2) + 1); // params process_group process process_table
+            lua_pop(L, 1);                             // params process_group process
+        }
     }
+
 #endif
     close_toClose(proc, STDIO_STDIN);
     close_toClose(proc, STDIO_STDOUT);

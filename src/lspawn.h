@@ -12,10 +12,13 @@
 #else
 #include "environ.h"
 
+#include <fcntl.h>
 #include <pwd.h>
 #include <spawn.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#include "execve_spawnp.h"
 
 #endif
 
@@ -27,8 +30,9 @@ typedef struct spawn_params {
     STARTUPINFO si;
 #else
     const char *command, **argv, **envp;
-    posix_spawn_file_actions_t redirect;
-    posix_spawnattr_t attr;
+    // posix_spawn_file_actions_t redirect;
+    // posix_spawnattr_t attr;
+    int redirect[3];
 #endif
     const char *username, *password;
     stdioChannel* stdio[3];
