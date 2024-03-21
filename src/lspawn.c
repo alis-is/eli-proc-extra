@@ -274,7 +274,7 @@ child_init(int error_pipe, int uid, int gid, pid_t pgid, spawn_params* p) {
         child_finalize_error(error_pipe);
     }
 
-    if ((uid != -1 && setegid(uid) != 0) || (gid != -1 && seteuid(gid) != 0)) {
+    if ((uid != -1 && setgid(uid) != 0) || (gid != -1 && setuid(gid) != 0)) {
         child_finalize_error(error_pipe);
     }
 
