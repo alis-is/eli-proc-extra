@@ -13,6 +13,7 @@
 #include "environ.h"
 
 #include <fcntl.h>
+#include <grp.h>
 #include <pwd.h>
 #include <spawn.h>
 #include <sys/types.h>
