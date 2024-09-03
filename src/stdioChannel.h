@@ -4,9 +4,10 @@
 #include "lauxlib.h"
 #include "stream.h"
 
-#define STDIO_STDIN  0
-#define STDIO_STDOUT 1
-#define STDIO_STDERR 2
+#define STDIO_STDIN          0
+#define STDIO_STDOUT         1
+#define STDIO_STDERR         2
+#define STDIO_OUTPUT_STREAMS 3
 
 typedef enum stdioChannelKind {
     STDIO_CHANNEL_INHERIT_KIND,

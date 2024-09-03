@@ -60,7 +60,7 @@ lcheck_option_with_fallback(lua_State* L, int arg, const char* def, const char* 
 }
 
 static int
-get_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
+setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
     stdioChannel* channel = calloc(1, sizeof(stdioChannel));
     channel->fdToClose = -1;
     lua_getfield(L, idx, stdname);
@@ -71,6 +71,7 @@ get_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
         case 'i': stdioKind = STDIO_STDIN; break;
         case 'o': stdioKind = STDIO_STDOUT; break;
         case 'e': stdioKind = STDIO_STDERR; break;
+        case 'p': stdioKind = STDIO_OUTPUT_STREAMS; break; // output
     }
 
     int top = lua_gettop(L);
@@ -135,6 +136,7 @@ get_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
             luaL_getmetatable(L, ELI_STREAM_RW_METATABLE);
             switch (stdioKind) {
                 case STDIO_STDIN: luaL_getmetatable(L, ELI_STREAM_W_METATABLE); break;
+                case STDIO_OUTPUT_STREAMS:
                 case STDIO_STDOUT:
                 case STDIO_STDERR: luaL_getmetatable(L, ELI_STREAM_R_METATABLE); break;
             }
@@ -184,13 +186,19 @@ get_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
             }
     }
 
-    p->stdio[stdioKind] = channel;
+    switch (stdioKind) {
+        case STDIO_OUTPUT_STREAMS:
+            p->stdio[STDIO_STDOUT] = channel;
+            p->stdio[STDIO_STDERR] = channel;
+            break;
+        default: p->stdio[stdioKind] = channel; break;
+    }
     lua_pop(L, 1);
     return 0;
 }
 
 static int
-get_redirects(lua_State* L, int idx, spawn_params* p) {
+setup_redirects(lua_State* L, int idx, spawn_params* p) {
     lua_getfield(L, idx, "stdio");
 
     // pipe, inherit, ignore are supported values
@@ -214,19 +222,39 @@ get_redirects(lua_State* L, int idx, spawn_params* p) {
             break;
         case LUA_TTABLE: break;
     }
+
     int res;
-    res = get_redirect(L, "stdin", -1, p);
+    res = setup_redirect(L, "stdin", -1, p);
     if (res) {
         return res;
     }
-    res = get_redirect(L, "stdout", -1, p);
-    if (res) {
-        return res;
+
+    int wantsCombinedOutput = lua_getfield(L, -1, "output") != LUA_TNIL;
+    lua_pop(L, 1);
+    if (wantsCombinedOutput) {
+        int expectsStdout = lua_getfield(L, -1, "stdout") != LUA_TNIL;
+        lua_pop(L, 1);
+        int expectsStderr = lua_getfield(L, -1, "stderr") != LUA_TNIL;
+        lua_pop(L, 1);
+        if (expectsStdout || expectsStderr) {
+            luaL_error(L, "cannot specify both the output option and stdout/stderr options");
+            return 1;
+        }
+        res = setup_redirect(L, "output", -1, p);
+        if (res) {
+            return res;
+        }
+    } else {
+        res = setup_redirect(L, "stdout", -1, p);
+        if (res) {
+            return res;
+        }
+        res = setup_redirect(L, "stderr", -1, p);
+        if (res) {
+            return res;
+        }
     }
-    res = get_redirect(L, "stderr", -1, p);
-    if (res) {
-        return res;
-    }
+
     lua_pop(L, 1);
     return 0;
 }
@@ -323,7 +351,7 @@ eli_spawn(lua_State* L) {
         }
         lua_pop(L, 1);
     }
-    int err_count = get_redirects(L, 2, params); /* cmd opts ... */
+    int err_count = setup_redirects(L, 2, params); /* cmd opts ... */
     if (err_count > 0) {
         return err_count;
     }

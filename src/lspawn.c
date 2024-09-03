@@ -215,6 +215,10 @@ spawn_param_redirect(spawn_params* p, int d, HANDLE h) {
     }
     switch (d) {
         case STDIO_STDIN: p->si.hStdInput = h; break;
+        case STDIO_OUTPUT_STREAMS:
+            p->si.hStdOutput = h;
+            p->si.hStdError = h;
+            break;
         case STDIO_STDOUT: p->si.hStdOutput = h; break;
         case STDIO_STDERR: p->si.hStdError = h; break;
     }
@@ -222,7 +226,13 @@ spawn_param_redirect(spawn_params* p, int d, HANDLE h) {
 #else
 void
 spawn_param_redirect(spawn_params* p, int d, int fd) {
-    p->redirect[d] = fd;
+    switch (d) {
+        case STDIO_OUTPUT_STREAMS:
+            p->redirect[STDIO_STDOUT] = fd;
+            p->redirect[STDIO_STDERR] = fd;
+            break;
+        default: p->redirect[d] = fd; break;
+    }
 }
 #endif
 
@@ -244,12 +254,19 @@ close_stdio_channel(process* p, int stdKind) {
     if (channel == NULL) {
         return;
     }
-    if (channel->kind == STDIO_CHANNEL_STREAM_KIND) {
-        close(channel->stream->fd);
-        free(channel->stream);
+    switch (channel->kind) {
+        case STDIO_CHANNEL_STREAM_KIND:
+            close(channel->stream->fd);
+            free(channel->stream);
+            break;
+        default: break;
     }
-    p->stdio[stdKind] = NULL;
-    free(channel);
+
+    for (int i = 0; i < 3; i++) {
+        if (p->stdio[i] == channel) { // if we have a reference to the channel
+            p->stdio[i] = NULL;
+        }
+    }
 }
 
 #ifndef _WIN32
