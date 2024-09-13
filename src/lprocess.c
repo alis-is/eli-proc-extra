@@ -71,7 +71,7 @@ process_wait(lua_State* L) {
                     break;
                 }
                 // res == 0 means process is still running
-                usleep(1e6 / units);
+                nanosleep(1e9 / units);
                 elapsed++;
             }
             if (p->status != -1) {

@@ -14,7 +14,6 @@
 #include <fcntl.h>
 #include <windows.h>
 
-#define _lsleep          Sleep
 #define open             _open
 #define RDONLY_FLAG      _O_RDONLY
 #define WRONLY_FLAG      _O_WRONLY | _O_TRUNC | _O_BINARY | _O_CREAT
@@ -24,7 +23,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#define _lsleep          usleep
 #define RDONLY_FLAG      O_RDONLY
 #define WRONLY_FLAG      O_WRONLY | O_TRUNC | O_CREAT
 #define CREATION_FLAG    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH
