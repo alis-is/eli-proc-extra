@@ -45,11 +45,11 @@ static int
 process_wait(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     lua_Number interval = luaL_optnumber(L, 2, 0);
-    lua_Number units = luaL_optnumber(L, 3, 1);
+    int divider = get_sleep_divider_from_stack(L, 3, 1);
     if (p->status == -1) {
 #ifdef _WIN32
         DWORD exitcode;
-        if (WAIT_FAILED == WaitForSingleObject(p->hProcess, interval <= 0 ? INFINITE : (1e3 * interval / units))
+        if (WAIT_FAILED == WaitForSingleObject(p->hProcess, interval <= 0 ? INFINITE : (1e3 * interval / divider))
             || !GetExitCodeProcess(p->hProcess, &exitcode)) {
             return windows_pushlasterror(L);
         }
@@ -71,7 +71,7 @@ process_wait(lua_State* L) {
                     break;
                 }
                 // res == 0 means process is still running
-                sleep_for_fraction(1, units);
+                sleep_for_fraction(1, divider);
                 elapsed++;
             }
             if (p->status != -1) {
