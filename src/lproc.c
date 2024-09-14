@@ -114,7 +114,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     if (new_pipe(&descriptors) == -1) {
                         return push_error(L, "Failed to create pipe!");
                     };
-                    ELI_STREAM* stream = new_stream();
+                    ELI_STREAM* stream = eli_new_stream(NULL);
                     stream->fd = descriptors.fd[stdioKind == STDIO_STDIN ? 1 : 0];
                     channel->stream = stream;
 #ifdef _WIN32

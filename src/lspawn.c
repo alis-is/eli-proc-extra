@@ -311,6 +311,7 @@ child_init(int error_pipe, int uid, int gid, pid_t pgid, spawn_params* p) {
 
     execve_spawnp(p->command, (char* const*)p->argv, (char* const*)p->envp);
     child_finalize_error(error_pipe);
+    return 0;
 }
 
 #endif

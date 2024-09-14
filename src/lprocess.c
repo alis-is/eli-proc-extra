@@ -44,12 +44,12 @@ update_process_exit_status(process* p, int status) {
 static int
 process_wait(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-    lua_Number interval = luaL_optnumber(L, 2, 0);
-    int divider = get_sleep_divider_from_stack(L, 3, 1);
+    int duration = (int)luaL_optnumber(L, 2, 0);
+    int divider = get_sleep_divider_from_state(L, 3, 1);
     if (p->status == -1) {
 #ifdef _WIN32
         DWORD exitcode;
-        if (WAIT_FAILED == WaitForSingleObject(p->hProcess, interval <= 0 ? INFINITE : (1e3 * interval / divider))
+        if (WAIT_FAILED == WaitForSingleObject(p->hProcess, duration <= 0 ? INFINITE : (1e3 * duration / divider))
             || !GetExitCodeProcess(p->hProcess, &exitcode)) {
             return windows_pushlasterror(L);
         }
@@ -59,9 +59,9 @@ process_wait(lua_State* L) {
         int res = waitpid(p->pid, &status, WNOHANG);
         if (p->pid == res) {
             update_process_exit_status(p, status);
-        } else if (interval > 0) {
+        } else if (duration > 0) {
             int elapsed = 0;
-            while (p->status == -1 && elapsed < interval) {
+            while (p->status == -1 && elapsed < duration) {
                 int res = waitpid(p->pid, &status, WNOHANG);
                 if (p->pid == res) {
                     update_process_exit_status(p, status);
@@ -71,7 +71,7 @@ process_wait(lua_State* L) {
                     break;
                 }
                 // res == 0 means process is still running
-                sleep_for_fraction(1, divider);
+                sleep_ms(sleep_duration_to_ms(1, divider));
                 elapsed++;
             }
             if (p->status != -1) {
@@ -225,7 +225,7 @@ process_get_stdin(lua_State* L) {
     switch (channel->kind) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
-            ELI_STREAM* stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
+            ELI_STREAM* stream = eli_new_stream(L);
             stream->closed = channel->stream->closed;
             stream->fd = dup(channel->stream->fd);
             stream->notDisposable = 0;
@@ -249,7 +249,7 @@ process_get_stdout(lua_State* L) {
     switch (channel->kind) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
-            ELI_STREAM* stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
+            ELI_STREAM* stream = eli_new_stream(L);
             stream->closed = channel->stream->closed;
             stream->fd = dup(channel->stream->fd);
             stream->notDisposable = 0;
@@ -282,7 +282,7 @@ process_get_stderr(lua_State* L) {
     switch (channel->kind) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
-            ELI_STREAM* stream = lua_newuserdatauv(L, sizeof(ELI_STREAM), 0);
+            ELI_STREAM* stream = eli_new_stream(L);
             stream->closed = channel->stream->closed;
             stream->fd = dup(channel->stream->fd);
             stream->notDisposable = 0;
