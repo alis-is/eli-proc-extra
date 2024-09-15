@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "stdio_channel.h"
 
 #ifdef _WIN32
