@@ -68,7 +68,7 @@ process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD sign
     DWORD exitCode = -1;
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    STARTUPINFO si;
+    STARTUPINFOW si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
 
@@ -122,7 +122,7 @@ static int
 process_group_tostring(lua_State* L) {
     process_group* p = luaL_checkudata(L, 1, PROCESS_GROUP_METATABLE);
     char buf[40];
-    lua_pushlstring(L, buf, sprintf(buf, "process group (%lu)", (unsigned long)p->gid));
+    lua_pushlstring(L, buf, sprintf(buf, "process group (%llu)", (unsigned long long)p->gid));
     return 1;
 }
 

@@ -217,7 +217,7 @@ process_exited(lua_State* L) {
 static int
 process_get_stdin(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-    stdioChannel* channel = p->stdio[STDIO_STDIN];
+    stdio_channel* channel = p->stdio[STDIO_STDIN];
     if (channel == NULL) {
         lua_pushnil(L);
         return 1;
@@ -226,10 +226,7 @@ process_get_stdin(lua_State* L) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
             ELI_STREAM* stream = eli_new_stream(L);
-            stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
-            stream->notDisposable = 0;
-            stream->nonblocking = channel->stream->nonblocking;
+            stdio_channel_clone_into_stream(channel, stream);
             luaL_getmetatable(L, ELI_STREAM_W_METATABLE);
             lua_setmetatable(L, -2);
             break;
@@ -241,7 +238,7 @@ process_get_stdin(lua_State* L) {
 static int
 process_get_stdout(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-    stdioChannel* channel = p->stdio[STDIO_STDOUT];
+    stdio_channel* channel = p->stdio[STDIO_STDOUT];
     if (channel == NULL) {
         lua_pushnil(L);
         return 1;
@@ -250,10 +247,7 @@ process_get_stdout(lua_State* L) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
             ELI_STREAM* stream = eli_new_stream(L);
-            stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
-            stream->notDisposable = 0;
-            stream->nonblocking = channel->stream->nonblocking;
+            stdio_channel_clone_into_stream(channel, stream);
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
             break;
@@ -274,7 +268,7 @@ process_get_stdout(lua_State* L) {
 static int
 process_get_stderr(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
-    stdioChannel* channel = p->stdio[STDIO_STDERR];
+    stdio_channel* channel = p->stdio[STDIO_STDERR];
     if (channel == NULL) {
         lua_pushnil(L);
         return 1;
@@ -283,10 +277,7 @@ process_get_stderr(lua_State* L) {
         case STDIO_CHANNEL_STREAM_KIND:
         case STDIO_CHANNEL_EXTERNAL_STREAM_KIND:;
             ELI_STREAM* stream = eli_new_stream(L);
-            stream->closed = channel->stream->closed;
-            stream->fd = dup(channel->stream->fd);
-            stream->notDisposable = 0;
-            stream->nonblocking = channel->stream->nonblocking;
+            stdio_channel_clone_into_stream(channel, stream);
             luaL_getmetatable(L, ELI_STREAM_R_METATABLE);
             lua_setmetatable(L, -2);
             break;
@@ -305,7 +296,7 @@ process_get_stderr(lua_State* L) {
 }
 
 static const char*
-get_channel_kind_alias(stdioChannel* channel) {
+get_channel_kind_alias(stdio_channel* channel) {
     if (channel == NULL) {
         return "closed";
     }
@@ -352,9 +343,9 @@ process_close(lua_State* L) {
     if (p == NULL) {
         return 0;
     }
-    close_stdio_channel(p, STDIO_STDIN);
-    close_stdio_channel(p, STDIO_STDOUT);
-    close_stdio_channel(p, STDIO_STDERR);
+    close_proc_stdio_channel(p, STDIO_STDIN);
+    close_proc_stdio_channel(p, STDIO_STDOUT);
+    close_proc_stdio_channel(p, STDIO_STDERR);
     return 0;
 }
 

@@ -1,7 +1,7 @@
 #ifndef ELI_PROCESS_H_
 #define ELI_PROCESS_H_
 #include "lua.h"
-#include "stdioChannel.h"
+#include "stdio_channel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -21,7 +21,7 @@ typedef struct process {
     HANDLE hProcess;
 #endif
     process_id pid;
-    stdioChannel* stdio[3];
+    stdio_channel* stdio[3];
 } process;
 
 #define PROCESS_METATABLE "ELI_PROCESS"

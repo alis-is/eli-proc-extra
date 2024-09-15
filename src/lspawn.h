@@ -5,7 +5,7 @@
 #include "lprocess.h"
 #include "lprocess_group.h"
 #include "lua.h"
-#include "stdioChannel.h"
+#include "stdio_channel.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -36,7 +36,7 @@ typedef struct spawn_params {
     int redirect[3];
 #endif
     const char *username, *password;
-    stdioChannel* stdio[3];
+    stdio_channel* stdio[3];
     int createProcessGroup;
 } spawn_params;
 
@@ -53,5 +53,5 @@ void spawn_param_redirect(spawn_params* p, int d, int fd);
 #endif
 int spawn_param_execute(lua_State* L);
 
-void close_stdio_channel(process* p, int stdKind);
+void close_proc_stdio_channel(process* p, int stdKind);
 #endif

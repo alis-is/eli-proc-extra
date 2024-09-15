@@ -59,8 +59,7 @@ lcheck_option_with_fallback(lua_State* L, int arg, const char* def, const char* 
 
 static int
 setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
-    stdioChannel* channel = calloc(1, sizeof(stdioChannel));
-    channel->fdToClose = -1;
+    stdio_channel* channel = new_stdio_channel();
     lua_getfield(L, idx, stdname);
 
     int stdioKind;
@@ -117,13 +116,8 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     ELI_STREAM* stream = eli_new_stream(NULL);
                     stream->fd = descriptors.fd[stdioKind == STDIO_STDIN ? 1 : 0];
                     channel->stream = stream;
-#ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind,
-                                         (HANDLE)_get_osfhandle(descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]));
-#else
                     spawn_param_redirect(p, stdioKind, descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]);
-#endif
-                    channel->fdToClose = descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1];
+                    channel->fd_to_close = descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1];
                     break;
                 default: luaL_error(L, "Invalid stdio type: %s!"); return 1;
             }
@@ -172,11 +166,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
 
                 channel->kind = STDIO_CHANNEL_EXTERNAL_STREAM_KIND;
                 channel->stream = stream;
-#ifdef _WIN32
-                spawn_param_redirect(p, stdioKind, (HANDLE)_get_osfhandle(stream->fd));
-#else
                 spawn_param_redirect(p, stdioKind, stream->fd);
-#endif
             } else {
                 lua_pop(L, lua_gettop(L) - top);
                 luaL_typeerror(L, -1, "FILE*/ELI_STREAM");

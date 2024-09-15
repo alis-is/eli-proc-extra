@@ -236,31 +236,10 @@ spawn_param_redirect(spawn_params* p, int d, int fd) {
 }
 #endif
 
-static void
-close_toClose(process* p, int stdKind) {
-    stdioChannel* channel = p->stdio[stdKind];
-    if (channel == NULL) {
-        return;
-    }
-    if (channel->fdToClose >= 0) {
-        close(channel->fdToClose);
-        channel->fdToClose = -1;
-    }
-}
-
 void
-close_stdio_channel(process* p, int stdKind) {
-    stdioChannel* channel = p->stdio[stdKind];
-    if (channel == NULL) {
-        return;
-    }
-    switch (channel->kind) {
-        case STDIO_CHANNEL_STREAM_KIND:
-            close(channel->stream->fd);
-            free(channel->stream);
-            break;
-        default: break;
-    }
+close_proc_stdio_channel(process* p, int stdKind) {
+    stdio_channel* channel = p->stdio[stdKind];
+    close_stdio_channel(channel);
 
     for (int i = 0; i < 3; i++) {
         if (p->stdio[i] == channel) { // if we have a reference to the channel
@@ -469,14 +448,14 @@ spawn_param_execute(lua_State* L) {
     }
 
 #endif
-    close_toClose(proc, STDIO_STDIN);
-    close_toClose(proc, STDIO_STDOUT);
-    close_toClose(proc, STDIO_STDERR);
+    close_stdio_channel_to_close(p->stdio[STDIO_STDIN]);
+    close_stdio_channel_to_close(p->stdio[STDIO_STDOUT]);
+    close_stdio_channel_to_close(p->stdio[STDIO_STDERR]);
 
     if (success != 1) {
-        close_stdio_channel(proc, STDIO_STDIN);
-        close_stdio_channel(proc, STDIO_STDOUT);
-        close_stdio_channel(proc, STDIO_STDERR);
+        close_proc_stdio_channel(proc, STDIO_STDIN);
+        close_proc_stdio_channel(proc, STDIO_STDOUT);
+        close_proc_stdio_channel(proc, STDIO_STDERR);
 #ifdef _WIN32
         return windows_pushlasterror(L);
 #else
