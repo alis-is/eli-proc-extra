@@ -1,8 +1,8 @@
 #include "lauxlib.h"
+#include "lerror.h"
 #include "lprocess.h"
 #include "lprocess_group.h"
 #include "lua.h"
-#include "lutil.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -456,11 +456,7 @@ spawn_param_execute(lua_State* L) {
         close_proc_stdio_channel(proc, STDIO_STDIN);
         close_proc_stdio_channel(proc, STDIO_STDOUT);
         close_proc_stdio_channel(proc, STDIO_STDERR);
-#ifdef _WIN32
-        return windows_pushlasterror(L);
-#else
         return push_error(L, NULL);
-#endif
     }
     return 1;
 }

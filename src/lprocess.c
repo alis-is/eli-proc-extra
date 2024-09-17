@@ -3,11 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lauxlib.h"
+#include "lerror.h"
+#include "lsleep.h"
 #include "lspawn.h"
 #include "lstream.h"
 #include "lua.h"
 #include "lualib.h"
-#include "lutil.h"
 #include "stream.h"
 
 #ifdef _WIN32
@@ -51,7 +52,7 @@ process_wait(lua_State* L) {
         DWORD exitcode;
         if (WAIT_FAILED == WaitForSingleObject(p->hProcess, duration <= 0 ? INFINITE : (1e3 * duration / divider))
             || !GetExitCodeProcess(p->hProcess, &exitcode)) {
-            return windows_pushlasterror(L);
+            return push_error(L, NULL);
         }
         p->status = exitcode;
 #else
@@ -109,7 +110,7 @@ process_kill(lua_State* L) {
                                   "it is possible to send SIGBREAK directly only to a spawned child process instance");
             }
             if (!GenerateConsoleCtrlEvent(event, p->pid)) {
-                return windows_pushlasterror(L);
+                return push_error(L, NULL);
             }
             lua_pushboolean(L, 1);
             return 1;
@@ -119,7 +120,7 @@ process_kill(lua_State* L) {
         }
 
         if (!TerminateProcess(p->hProcess, 1)) {
-            return windows_pushlasterror(L);
+            return push_error(L, NULL);
         }
         //p->status = 0;
 #else
@@ -142,7 +143,7 @@ process_tostring(lua_State* L) {
 #ifdef _WIN32
         DWORD exitcode;
         if (!GetExitCodeProcess(p->hProcess, &exitcode)) {
-            return windows_pushlasterror(L);
+            return push_error(L, NULL);
         }
         p->status = (exitcode == STILL_ACTIVE) ? -1 : 0;
 #else
@@ -166,7 +167,7 @@ process_exitcode(lua_State* L) {
 #ifdef _WIN32
         DWORD exitcode;
         if (!GetExitCodeProcess(p->hProcess, &exitcode)) {
-            return windows_pushlasterror(L);
+            return push_error(L, NULL);
         }
         p->status = exitcode;
 #else
@@ -193,7 +194,7 @@ process_exited(lua_State* L) {
 #ifdef _WIN32
         DWORD exitcode;
         if (!GetExitCodeProcess(p->hProcess, &exitcode)) {
-            return windows_pushlasterror(L);
+            return push_error(L, NULL);
         }
         p->status = exitcode;
         active = exitcode == STILL_ACTIVE;

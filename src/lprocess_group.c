@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lauxlib.h"
+#include "lerror.h"
 #include "lspawn.h"
 #include "lstream.h"
 #include "lua.h"
 #include "lualib.h"
-#include "lutil.h"
 #include "stream.h"
 
 #ifdef _WIN32
@@ -180,7 +180,7 @@ process_group_kill(lua_State* L) {
                 continue;
             }
             if (!TerminateProcess(proc->hProcess, 1)) {
-                return windows_pushlasterror(L);
+                return push_error(L, NULL);
             }
             lua_pop(L, 1);
         }
@@ -188,7 +188,7 @@ process_group_kill(lua_State* L) {
         return 1;
     }
     if (!TerminateJobObject(p->gid, 1)) {
-        return windows_pushlasterror(L);
+        return push_error(L, NULL);
     }
 #else
     int const status = kill(-p->gid, signal);

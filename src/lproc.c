@@ -2,9 +2,9 @@
 #include "lua.h"
 
 #include <signal.h>
+#include "lerror.h"
 #include "lprocess.h"
 #include "lspawn.h"
-#include "lutil.h"
 #include "pipe.h"
 
 #include <stdlib.h>
