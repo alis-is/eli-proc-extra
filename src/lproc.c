@@ -113,15 +113,16 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
 
                     if (dev_null_fd == INVALID_HANDLE_VALUE) {
                         return push_error(L, "Failed to open NUL device!");
-                        return 1;
                     }
+                    spawn_param_redirect(p, stdioKind, dev_null_fd);
 #else
                     int dev_null_fd = open("/dev/null", O_RDWR);
                     if (dev_null_fd == -1) {
                         return push_error(L, "Failed to open /dev/null!");
                     }
+                    spawn_param_redirect(p, stdioKind, dev_null_fd);
 #endif
-                    spawn_param_redirect(p, stdioKind, dup(dev_null_fd));
+                    channel->fd_to_close = dev_null_fd;
                     break;
                 }
                 case PIPE: {
