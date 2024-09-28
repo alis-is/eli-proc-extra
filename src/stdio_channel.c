@@ -17,6 +17,20 @@ new_stdio_channel() {
     return channel;
 }
 
+static void
+free_attached_stream(stdio_channel* channel) {
+#ifdef _WIN32
+    if (channel->stream->fd != INVALID_HANDLE_VALUE) {
+        CloseHandle(channel->stream->fd);
+    }
+#else
+    if (channel->stream->fd >= 0) {
+        close(channel->stream->fd);
+    }
+#endif
+    free(channel->stream);
+}
+
 void
 close_stdio_channel_to_close(stdio_channel* channel) {
     if (channel == NULL) {
@@ -42,18 +56,7 @@ close_stdio_channel(stdio_channel* channel) {
         return;
     }
     switch (channel->kind) {
-        case STDIO_CHANNEL_STREAM_KIND:
-#ifdef _WIN32
-            if (channel->stream->fd != INVALID_HANDLE_VALUE) {
-                CloseHandle(channel->stream->fd);
-            }
-#else
-            if (channel->stream->fd >= 0) {
-                close(channel->stream->fd);
-            }
-#endif
-            free(channel->stream);
-            break;
+        case STDIO_CHANNEL_STREAM_KIND: free_attached_stream(channel); break;
         default: break;
     }
 }

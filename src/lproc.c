@@ -78,7 +78,6 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
             static const char* lst[] = {"ignore", "inherit", "pipe", "path", NULL};
             int kind = lcheck_option_with_fallback(L, -1, "pipe", "path", lst); // fallback to default pipe mode
             switch (kind) {
-                case IGNORE: channel->kind = STDIO_CHANNEL_IGNORE_KIND; break;
                 case INHERIT: channel->kind = STDIO_CHANNEL_INHERIT_KIND;
 #ifdef _WIN32
                     spawn_param_redirect(p, stdioKind,
@@ -107,7 +106,25 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     spawn_param_redirect(p, stdioKind, fd);
 #endif
                     break;
-                case PIPE:
+                case IGNORE: {
+#ifdef _WIN32
+                    HANDLE dev_null_fd = CreateFile("NUL", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                                                    FILE_ATTRIBUTE_NORMAL, NULL);
+
+                    if (dev_null_fd == INVALID_HANDLE_VALUE) {
+                        return push_error(L, "Failed to open NUL device!");
+                        return 1;
+                    }
+#else
+                    int dev_null_fd = open("/dev/null", O_RDWR);
+                    if (dev_null_fd == -1) {
+                        return push_error(L, "Failed to open /dev/null!");
+                    }
+#endif
+                    spawn_param_redirect(p, stdioKind, dup(dev_null_fd));
+                    break;
+                }
+                case PIPE: {
                     channel->kind = STDIO_CHANNEL_STREAM_KIND;
                     PIPE_DESCRIPTORS descriptors;
                     if (new_pipe(&descriptors) == -1) {
@@ -119,6 +136,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     spawn_param_redirect(p, stdioKind, descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1]);
                     channel->fd_to_close = descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1];
                     break;
+                }
                 default: luaL_error(L, "Invalid stdio type: %s!"); return 1;
             }
             break;
