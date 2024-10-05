@@ -80,10 +80,9 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
             switch (kind) {
                 case INHERIT: channel->kind = STDIO_CHANNEL_INHERIT_KIND;
 #ifdef _WIN32
-                    spawn_param_redirect(p, stdioKind,
-                                         GetStdHandle(-10 + (-1 * stdioKind) /* remap stdio kind to win STD_*/));
+                    spawn_param_redirect_inherit(p, stdioKind);
 #else
-                    spawn_param_redirect(p, stdioKind, stdioKind);
+                    spawn_param_redirect_inherit(p, stdioKind);
 #endif
                     break;
                 case PATH:

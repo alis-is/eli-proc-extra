@@ -48,8 +48,10 @@ void spawn_param_args(lua_State* L, spawn_params* p);
 void spawn_param_env(lua_State* L, spawn_params* p);
 #ifdef _WIN32
 void spawn_param_redirect(spawn_params* p, int d, HANDLE h);
+void spawn_param_redirect_inherit(spawn_params* p, int d);
 #else
 void spawn_param_redirect(spawn_params* p, int d, int fd);
+void spawn_param_redirect_inherit(spawn_params* p, int d);
 #endif
 int spawn_param_execute(lua_State* L);
 

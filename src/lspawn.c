@@ -223,6 +223,21 @@ spawn_param_redirect(spawn_params* p, int d, HANDLE h) {
         case STDIO_STDERR: p->si.hStdError = h; break;
     }
 }
+
+void
+spawn_param_redirect_inherit(spawn_params* p, int d) {
+    switch (d) {
+        case STDIO_STDIN: spawn_param_redirect(p, d, GetStdHandle(STD_INPUT_HANDLE)); break;
+        case STDIO_STDOUT: spawn_param_redirect(p, d, GetStdHandle(STD_OUTPUT_HANDLE)); break;
+        case STDIO_STDERR: spawn_param_redirect(p, d, GetStdHandle(STD_ERROR_HANDLE)); break;
+        case STDIO_OUTPUT_STREAMS:
+            spawn_param_redirect(p, STDIO_STDOUT, GetStdHandle(STD_OUTPUT_HANDLE));
+            spawn_param_redirect(p, STDIO_STDERR, GetStdHandle(STD_ERROR_HANDLE));
+            break;
+        default: break;
+    }
+}
+
 #else
 void
 spawn_param_redirect(spawn_params* p, int d, int fd) {
@@ -232,6 +247,21 @@ spawn_param_redirect(spawn_params* p, int d, int fd) {
             p->redirect[STDIO_STDERR] = fd;
             break;
         default: p->redirect[d] = fd; break;
+    }
+}
+
+void
+spawn_param_redirect_inherit(spawn_params* p, int d) {
+    switch (d) {
+        case STDIO_STDIN: spawn_param_redirect(p, d, STDIN_FILENO); break;
+        case STDIO_STDOUT: spawn_param_redirect(p, d, STDOUT_FILENO); break;
+        case STDIO_STDERR: spawn_param_redirect(p, d, STDERR_FILENO); break;
+        case STDIO_OUTPUT_STREAMS:
+            spawn_param_redirect(p, STDIO_STDOUT, STDOUT_FILENO);
+            spawn_param_redirect(p, STDIO_STDERR, STDERR_FILENO);
+            break;
+
+        default: break;
     }
 }
 #endif
