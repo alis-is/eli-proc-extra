@@ -358,21 +358,21 @@ spawn_param_execute(lua_State* L) {
     proc->isChild = 1;         // if we decide to use different creation flags we may have to adjust
     DWORD creationFlags =
         CREATE_NEW_PROCESS_GROUP
-        | (p->createProcessGroup || luaL_testudata(L, 2, PROCESS_GROUP_METATABLE) != NULL ? CREATE_NEW_CONSOLE : 0);
+        | (p->create_process_group || luaL_testudata(L, 2, PROCESS_GROUP_METATABLE) != NULL ? CREATE_NEW_CONSOLE : 0);
     success = CreateProcess(0, c, 0, 0, TRUE, creationFlags, e, 0, &p->si, &pi) != 0;
     free(c);
 
     if (success == 1) {
         proc->hProcess = pi.hProcess;
         proc->pid = pi.dwProcessId;
-        if (p->createProcessGroup) {
-            HANDLE processGroup = CreateJobObject(NULL, NULL);
-            if (processGroup == NULL) {
+        if (p->create_process_group) {
+            HANDLE process_group = CreateJobObject(NULL, NULL);
+            if (process_group == NULL) {
                 success = 0;
             } else {
                 // create process group
-                new_process_group(L, processGroup); // params process_group proc process_group
-                lua_replace(L, 2);                  // params process_group proc
+                new_process_group(L, process_group); // params process_group proc process_group
+                lua_replace(L, 2);                   // params process_group proc
             }
         }
 
@@ -415,7 +415,7 @@ spawn_param_execute(lua_State* L) {
     // process group
     // params process_group proc
     pid_t pid, pgid = -1;
-    if (p->createProcessGroup) {
+    if (p->create_process_group) {
         pgid = 0; // create new process group
     } else {
         process_group* pg = (process_group*)luaL_testudata(L, 2, PROCESS_GROUP_METATABLE);
@@ -462,7 +462,7 @@ spawn_param_execute(lua_State* L) {
     if (success == 1) {
         proc->pid = pid;
 
-        if (p->createProcessGroup) {
+        if (p->create_process_group) {
             new_process_group(L, proc->pid); // params process_group proc process_group
             lua_copy(L, -1, -3);             // params process_group proc process_group
             lua_setiuservalue(L, -2, 1);     // params process_group proc

@@ -309,20 +309,20 @@ eli_spawn(lua_State* L) {
     spawn_param_filename(params, lua_tostring(L, 1));
     /* get arguments, environment, and redirections */
     if (have_options) {
-        // newProcessGroup
-        lua_getfield(L, 2, "createProcessGroup"); /* cmd opts ... createProcessGroup */
+        // new process_group
+        lua_getfield(L, 2, "create_process_group"); /* cmd opts ... create_process_group */
         if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) {
-            params->createProcessGroup = 1;
+            params->create_process_group = 1;
         }
         lua_pop(L, 1); /* cmd opts ... */
 
-        lua_getfield(L, 2, "username"); /* cmd opts ... createProcessGroup */
+        lua_getfield(L, 2, "username"); /* cmd opts ... create_process_group */
         if (lua_type(L, -1) == LUA_TSTRING) {
             params->username = lua_tostring(L, -1);
         }
         lua_pop(L, 1); /* cmd opts ... */
 
-        lua_getfield(L, 2, "password"); /* cmd opts ... createProcessGroup */
+        lua_getfield(L, 2, "password"); /* cmd opts ... create_process_group */
         if (lua_type(L, -1) == LUA_TSTRING) {
             params->password = lua_tostring(L, -1);
         }
@@ -362,10 +362,10 @@ eli_spawn(lua_State* L) {
         return err_count;
     }
     // keep just params and process group at the stack
-    lua_getfield(L, 2, "processGroup"); /* -> cmd opts params processGroup/nil */
-    lua_rotate(L, 1, 2);                /* -> params processGroup/nil cmd opts */
-    lua_settop(L, 2);                   /* -> params processGroup/nil */
-    return spawn_param_execute(L);      /* proc/nil error */
+    lua_getfield(L, 2, "process_group"); /* -> cmd opts params process_group/nil */
+    lua_rotate(L, 1, 2);                 /* -> params process_group/nil cmd opts */
+    lua_settop(L, 2);                    /* -> params process_group/nil */
+    return spawn_param_execute(L);       /* proc/nil error */
 }
 
 static int
@@ -382,21 +382,21 @@ eli_get_process_by_id(lua_State* L) {
 
     // if second argument is a table, check options for - assume process group
     if (lua_type(L, 2) == LUA_TTABLE) {                     // pid options process
-        lua_getfield(L, 2, "isSeparateProcessGroup");       // pid options process isSeparateProcessGroup
-        if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) { // pid options process isSeparateProcessGroup
+        lua_getfield(L, 2, "is_separate_process_group");    // pid options process is_separate_process_group
+        if (lua_isboolean(L, -1) && lua_toboolean(L, -1)) { // pid options process is_separate_process_group
 // we do not have job, group will be controlled on per process basis...
 #ifdef _WIN32
-            new_process_group(L, (HANDLE)NULL); // pid options process isSeparateProcessGroup process-group
+            new_process_group(L, (HANDLE)NULL); // pid options process is_separate_process_group process-group
 #else
-            new_process_group(L, (pid_t)pid); // pid options process isSeparateProcessGroup process-group
+            new_process_group(L, (pid_t)pid); // pid options process is_separate_process_group process-group
 #endif
-            lua_getiuservalue(L, -1, 1); // pid options process isSeparateProcessGroup process-group process-table
-            lua_rotate(L, -2, 1);        // pid options process isSeparateProcessGroup process-table process-group
-            lua_setiuservalue(L, -4, 1); // pid options process isSeparateProcessGroup process-table
+            lua_getiuservalue(L, -1, 1); // pid options process is_separate_process_group process-group process-table
+            lua_rotate(L, -2, 1);        // pid options process is_separate_process_group process-table process-group
+            lua_setiuservalue(L, -4, 1); // pid options process is_separate_process_group process-table
 
-            lua_pushvalue(L, -3);  // pid options process isSeparateProcessGroup process-table process
-            lua_rawseti(L, -2, 1); // pid options process isSeparateProcessGroup process-table
-            lua_pop(L, 1);         // pid options process isSeparateProcessGroup
+            lua_pushvalue(L, -3);  // pid options process is_separate_process_group process-table process
+            lua_rawseti(L, -2, 1); // pid options process is_separate_process_group process-table
+            lua_pop(L, 1);         // pid options process is_separate_process_group
         }
         lua_pop(L, 1); // pid options process
     }

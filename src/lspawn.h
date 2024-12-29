@@ -37,7 +37,7 @@ typedef struct spawn_params {
 #endif
     const char *username, *password;
     stdio_channel* stdio[3];
-    int createProcessGroup;
+    int create_process_group;
 } spawn_params;
 
 int proc_create_meta(lua_State* L);
