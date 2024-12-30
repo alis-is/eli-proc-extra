@@ -373,7 +373,7 @@ process_create_meta(lua_State* L) {
     lua_pushcfunction(L, process_exited);
     lua_setfield(L, -2, "exited");
     lua_pushcfunction(L, process_exitcode);
-    lua_setfield(L, -2, "get_exitcode");
+    lua_setfield(L, -2, "get_exit_code");
 
     lua_pushcfunction(L, process_get_stdin);
     lua_setfield(L, -2, "get_stdin");
