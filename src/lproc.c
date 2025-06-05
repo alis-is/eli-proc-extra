@@ -117,7 +117,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
 #else
                     int dev_null_fd = open("/dev/null", O_RDWR);
                     if (dev_null_fd == -1) {
-                        return push_error(L, "Failed to open /dev/null!");
+                        return push_error(L, "failed to open /dev/null");
                     }
                     spawn_param_redirect(p, stdioKind, dev_null_fd);
 #endif
@@ -128,7 +128,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     channel->kind = STDIO_CHANNEL_STREAM_KIND;
                     PIPE_DESCRIPTORS descriptors;
                     if (new_pipe(&descriptors) == -1) {
-                        return push_error(L, "Failed to create pipe!");
+                        return push_error(L, "failed to create pipe");
                     };
                     ELI_STREAM* stream = eli_new_stream(NULL);
                     stream->fd = descriptors.fd[stdioKind == STDIO_STDIN ? 1 : 0];
@@ -137,7 +137,7 @@ setup_redirect(lua_State* L, const char* stdname, int idx, spawn_params* p) {
                     channel->fd_to_close = descriptors.fd[stdioKind == STDIO_STDIN ? 0 : 1];
                     break;
                 }
-                default: luaL_error(L, "Invalid stdio type: %s!"); return 1;
+                default: luaL_error(L, "invalid stdio type: %s!"); return 1;
             }
             break;
         case LUA_TUSERDATA:
