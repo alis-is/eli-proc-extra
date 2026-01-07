@@ -20,63 +20,81 @@
 #endif
 
 #ifdef _WIN32
+static wchar_t cachedHelperPath[MAX_PATH] = {0};
+
+/*
+** Generates a random filename and attempts to create it exclusively.
+** Returns 1 on success, 0 on failure.
+*/
+static int
+ensure_helper_binary(void) {
+    if (cachedHelperPath[0] != L'\0') {
+        return 1; // Already initialized
+    }
+
+    wchar_t tempDir[MAX_PATH];
+    if (GetTempPathW(MAX_PATH, tempDir) == 0) {
+        return 0;
+    }
+
+    // Try up to 5 times to generate a unique file (in case of collision)
+    for (int i = 0; i < 5; i++) {
+        unsigned int rnd1, rnd2;
+        if (rand_s(&rnd1) != 0 || rand_s(&rnd2) != 0) {
+            return 0; // Random generation failed
+        }
+
+        // Generate a filename with 64-bits of randomness
+        // e.g., C:\Temp\eli_kill_a1b2c3d4_e5f6g7h8.exe
+        wchar_t candidatePath[MAX_PATH];
+        swprintf(candidatePath, MAX_PATH, L"%ls%ls_%08x_%08x.exe", tempDir, L"eli_kill", rnd1, rnd2);
+
+        // CREATE_NEW is critical here.
+        // It fails if the file already exists (preventing squatting/overwriting).
+        HANDLE hFile = CreateFileW(candidatePath, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+
+        if (hFile != INVALID_HANDLE_VALUE) {
+            // We successfully reserved a unique name that didn't exist before.
+            DWORD written = 0;
+            int writeResult = WriteFile(hFile, killBinary, KILL_BINARY_SIZE, &written, NULL);
+            CloseHandle(hFile);
+
+            if (writeResult && written == KILL_BINARY_SIZE) {
+                // Success! Cache the path and return.
+                wcscpy(cachedHelperPath, candidatePath);
+                return 1;
+            } else {
+                // Write failed (disk full?), clean up and fail.
+                DeleteFileW(candidatePath);
+                return 0;
+            }
+        }
+
+        // If we are here, CreateFile failed.
+        // If ERROR_FILE_EXISTS, we loop and try a new random number.
+        if (GetLastError() != ERROR_FILE_EXISTS) {
+            return 0; // Genuine IO error
+        }
+    }
+
+    return 0; // Failed to generate unique name after retries
+}
+
 DWORD
 process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD signal) {
-    // create temp file and write kill binary into it
-    // run kill binary with pid and signal
-    wchar_t path[MAX_PATH];
-    if (GetTempPathW(MAX_PATH, path) == 0) {
-        // Handle error: Failed to retrieve temporary path
+    // Ensure the binary exists
+    if (!ensure_helper_binary()) {
         return 0;
     }
 
-    if (GetTempFileNameW(path, L"kill", 0, path) == 0) {
-        // Handle error: Failed to generate temporary file name
-        return 0;
-    }
-    DeleteFileW(path);
-
-    // Append ".exe" extension to the generated temporary file path
-    size_t pathLength = wcslen(path);
-    wchar_t const* extension = L".exe";
-    size_t extensionLength = wcslen(extension);
-    if (pathLength + extensionLength + 1 >= MAX_PATH) {
-        // Adjust the path to fit the extension and the null terminator
-        path[MAX_PATH - extensionLength - 1] = L'\0';
-    }
-    if (wcscat(path, extension) == NULL) {
-        // Handle error: Failed to append extension to path
-        return 0;
-    }
-
-    HANDLE exeFile = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
-                                 FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-    if (exeFile == INVALID_HANDLE_VALUE) {
-        return 0;
-    }
-
-    unsigned long size = 0;
-    DWORD written = 0;
-    int writeResult = WriteFile(exeFile, killBinary, KILL_BINARY_SIZE, &written, NULL);
-    CloseHandle(exeFile);
-    if (writeResult == 0 || written != KILL_BINARY_SIZE) {
-        return 0;
-    }
-
-    CloseHandle(exeFile);
-
-    DWORD exitCode = -1;
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&pi, sizeof(pi));
-    STARTUPINFOW si;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-
-    wchar_t* commandLine = malloc(sizeof(wchar_t) * 12 * pidc);
+    // Allocate space for PIDs + Signal + Safety
+    wchar_t* commandLine = malloc(sizeof(wchar_t) * 12 * (pidc + 2));
     if (commandLine == NULL) {
         return 0;
     }
     commandLine[0] = L'\0';
+
+    // Build arguments: "PID1 PID2 ... PIDN SIGNAL"
     for (int i = 0; i < pidc; i++) {
         wchar_t temp[12];
         swprintf(temp, 12, L"%lu ", (unsigned long)pid[i]);
@@ -86,17 +104,27 @@ process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD sign
     swprintf(temp, 12, L"%lu", (unsigned long)signal);
     wcscat(commandLine, temp);
 
-    if (CreateProcessW(path, commandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi) == 0) {
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    // Create Process using the cached path
+    if (CreateProcessW(cachedHelperPath, commandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == 0) {
+        free(commandLine);
         return 0;
     }
     free(commandLine);
 
+    // Wait for completion
+    DWORD exitCode = -1;
     int failed =
         WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(pi.hProcess, &exitCode);
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    DeleteFileW(path);
     if (failed || exitCode != 0) {
         return 0;
     }
