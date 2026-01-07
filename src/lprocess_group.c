@@ -114,11 +114,10 @@ process_group_generate_ctrl_event(lua_State* L, DWORD* pid, int pidc, DWORD sign
     int created = 0;
     int retries = 5;
     while (retries > 0) {
-        // Create Process using the cached path
         if (CreateProcessW(cachedHelperPath, commandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)
-            == 0) {
-            free(commandLine);
-            return 0;
+            != 0) {
+            created = 1;
+            break;
         }
         DWORD err = GetLastError();
         // If file is locked by AV or OS (Access Denied / Sharing Violation), wait and retry
