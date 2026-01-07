@@ -251,8 +251,9 @@ process_group_join(lua_State* L) {
     process* p = luaL_checkudata(L, 2, PROCESS_METATABLE);
     if (pg != NULL && p != NULL) {
         lua_getiuservalue(L, 1, 1);
-        // append process to the process table
+        int len = (int)lua_rawlen(L, -1);
         lua_pushvalue(L, -2);
+        lua_rawseti(L, -2, len + 1);
     }
     return 0;
 }
