@@ -46,7 +46,7 @@ static int
 process_wait(lua_State* L) {
     process* p = luaL_checkudata(L, 1, PROCESS_METATABLE);
     int duration = (int)luaL_optnumber(L, 2, 0);
-    int divider = get_sleep_divider_from_state(L, 3, 1);
+    double divider = get_ms_divider_from_state(L, 3, 1.0);
     if (p->status == -1) {
 #ifdef _WIN32
         DWORD exitcode;
@@ -72,7 +72,7 @@ process_wait(lua_State* L) {
                     break;
                 }
                 // res == 0 means process is still running
-                sleep_ms(sleep_duration_to_ms(1, divider));
+                sleep_ms(1.0 / divider);
                 elapsed++;
             }
             if (p->status != -1) {
