@@ -1,3 +1,4 @@
+#define _CRT_RAND_S
 #include "lprocess_group.h"
 #include <signal.h>
 #include <stdio.h>
